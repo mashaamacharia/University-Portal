@@ -1,0 +1,38 @@
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+
+# .NET build and test outputs
+[Bb]in/
+[Oo]bj/
+[Tt]est[Rr]esults/
+*.user
+*.suo
+.vs/
+
+# Frontend dependencies and generated output
+node_modules/
+.next/
+out/
+dist/
+coverage/
+.vercel/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Frontend/tooling dotenv files (ASP.NET Core does not load these by default)
+.env
+.env.*
+!.env.example
+!.env.template
+
+# Business Central AL generated files
+.alpackages/
+.alcache/
+.snapshots/
+*.app
+
+update1.md
