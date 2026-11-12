@@ -47,10 +47,36 @@ public record InvoiceLineDto(
 
 public record InvoiceDetailDto(InvoiceSummaryDto Invoice, IReadOnlyList<InvoiceLineDto> Lines);
 
+public record PaymentHistoryEntryDto(
+    string ReceiptNumber,
+    DateOnly PaymentDate,
+    decimal Amount,
+    string CurrencyCode,
+    bool Reversed);
+
+public class PaymentHistoryQuery : IValidatableObject
+{
+    public DateOnly? From { get; set; }
+    public DateOnly? To { get; set; }
+
+    [Range(1, 10000)]
+    public int Page { get; set; } = 1;
+
+    [Range(1, 100)]
+    public int PageSize { get; set; } = 25;
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext context)
+    {
+        if (From is { } from && To is { } to && from > to)
+            yield return new ValidationResult("'From' must not be after 'To'.", new[] { nameof(From), nameof(To) });
+    }
+}
+
 public record FeeStatementDto(
     StudentInfoDto Student,
     BalanceSummaryDto Balance,
     IReadOnlyList<InvoiceSummaryDto> Invoices,
+    IReadOnlyList<PaymentHistoryEntryDto> RecentPayments,
     DateTime GeneratedAtUtc);
 
 public record AgingBucketDto(string Label, decimal Amount);

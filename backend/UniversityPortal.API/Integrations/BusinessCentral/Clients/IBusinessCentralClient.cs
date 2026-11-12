@@ -35,6 +35,10 @@ public interface IBusinessCentralClient
         BcBalanceQuery query,
         CancellationToken ct = default);
 
+    Task<BcPagedList<BcCustomerLedgerEntryDto>> QueryCustomerLedgerEntriesAsync(
+        BcLedgerEntryQuery query,
+        CancellationToken ct = default);
+
     Task<IReadOnlyList<BcCustomerDto>> GetCustomersByNumbersAsync(
         IReadOnlyCollection<string> numbers,
         CancellationToken ct = default);

@@ -75,6 +75,7 @@ flowchart TD
 - Validate input and enforce application rules.
 - Call Business Central using supported authentication.
 - Convert Business Central responses into stable portal DTOs.
+- Provide student payment history using customer ledger entries, converting Business Central's negative payment amounts to positive student-facing amounts and flagging reversed entries.
 - Handle pagination, timeouts and API errors.
 - Apply safe retry and duplicate-prevention strategies to write operations.
 - Validate Business Central settings at startup and use bounded timeouts, retries and a circuit breaker for outbound requests. Retries are disabled for unsafe HTTP methods.
@@ -89,9 +90,19 @@ flowchart TD
 
 ### 4.4 AL Extension
 
-A custom AL extension may be added when a required university-specific entity or operation is not adequately supported by standard APIs.
+The `business-central/UniversityPortalAPI` AL extension contains a custom API page for customer ledger entries:
 
-It must use appropriate permissions and Business Central business logic. It must not bypass posting controls.
+```text
+business-central/
+└── UniversityPortalAPI/
+    ├── app.json
+    └── src/
+        └── CustomerLedgerEntriesApi.Page.al
+```
+
+`CustomerLedgerEntriesApi.Page.al` exposes the `Cust. Ledger Entry` table as the `customerLedgerEntries` API entity set (`techworks/universityPortal/v1.0`). It is configured as read-only: insert, modify and delete operations are disabled. The API includes customer, posting, document, due-date, currency, amount, remaining-balance and closure fields; amount FlowFields are calculated when each record is read. The backend queries this API for a signed-in student's payment entries to populate recent payments in the fee statement and the paged payment-history endpoint.
+
+The backend can consume this custom API when standard Business Central APIs do not expose the required ledger-entry data. A custom AL extension must use appropriate permissions and Business Central business logic. It must not bypass posting controls.
 
 ### 4.5 Optional Portal Database
 
