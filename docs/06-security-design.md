@@ -124,6 +124,8 @@ Where appropriate, include:
 
 Do not log access tokens, passwords or unnecessary personal and financial information.
 
+Business Central request logs include the HTTP method, URL path, status and elapsed time, but omit the query string because filters may contain customer identifiers. Business Central failure details are retained only in server logs; access to those logs must be restricted and managed according to the data-retention policy.
+
 ## 9. Data Protection
 
 - Use fictitious student records in development.

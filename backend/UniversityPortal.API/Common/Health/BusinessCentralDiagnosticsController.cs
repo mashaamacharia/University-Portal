@@ -5,104 +5,38 @@ namespace UniversityPortal.API.Common.Health;
 
 [ApiController]
 [Route("api/diagnostics/business-central")]
-public class BusinessCentralDiagnosticsController(IBusinessCentralClient businessCentralClient) : ControllerBase
+public class BusinessCentralDiagnosticsController : ControllerBase
 {
-    [HttpGet("companies")]
-    public async Task<IActionResult> GetCompanies(CancellationToken ct)
+    private readonly IBusinessCentralClient _bc;
+
+    public BusinessCentralDiagnosticsController(IBusinessCentralClient bc)
     {
-        try
-        {
-            return Ok(await businessCentralClient.GetCompaniesAsync(ct));
-        }
-        catch (HttpRequestException ex)
-        {
-            return StatusCode(
-                StatusCodes.Status502BadGateway,
-                new { error = "Could not reach Business Central", detail = ex.Message });
-        }
+        _bc = bc;
     }
 
+    [HttpGet("companies")]
+    public async Task<IActionResult> GetCompanies(CancellationToken ct) =>
+        Ok(await _bc.GetCompaniesAsync(ct));
+
     [HttpGet("customers")]
-    public async Task<IActionResult> GetCustomers([FromQuery] int top = 10, CancellationToken ct = default)
-    {
-        try
-        {
-            return Ok(await businessCentralClient.GetCustomersAsync(top, 0, ct));
-        }
-        catch (ArgumentOutOfRangeException)
-        {
-            return BadRequest(new { error = "The top query parameter must be greater than zero." });
-        }
-        catch (HttpRequestException ex)
-        {
-            return StatusCode(
-                StatusCodes.Status502BadGateway,
-                new { error = "Could not reach Business Central", detail = ex.Message });
-        }
-    }
+    public async Task<IActionResult> GetCustomers([FromQuery] int top = 10, CancellationToken ct = default) =>
+        Ok(await _bc.GetCustomersAsync(top, 0, ct));
 
     [HttpGet("customers/{number}/financial-details")]
     public async Task<IActionResult> GetFinancialDetails(string number, CancellationToken ct)
     {
-        try
-        {
-            var details = await businessCentralClient.GetCustomerFinancialDetailsAsync(number, ct);
-            return details is null ? NotFound() : Ok(details);
-        }
-        catch (ArgumentException)
-        {
-            return BadRequest(new { error = "A customer number is required." });
-        }
-        catch (HttpRequestException ex)
-        {
-            return StatusCode(
-                StatusCodes.Status502BadGateway,
-                new { error = "Could not reach Business Central", detail = ex.Message });
-        }
+        var details = await _bc.GetCustomerFinancialDetailsAsync(number, ct);
+        return details is null ? NotFound() : Ok(details);
     }
 
     [HttpGet("customers/{number}/invoices")]
     public async Task<IActionResult> GetInvoices(
         string number,
         [FromQuery] int top = 20,
-        CancellationToken ct = default)
-    {
-        try
-        {
-            return Ok(await businessCentralClient.GetPostedSalesInvoicesAsync(number, top, ct));
-        }
-        catch (ArgumentOutOfRangeException)
-        {
-            return BadRequest(new { error = "The top query parameter must be greater than zero." });
-        }
-        catch (ArgumentException)
-        {
-            return BadRequest(new { error = "A customer number is required." });
-        }
-        catch (HttpRequestException ex)
-        {
-            return StatusCode(
-                StatusCodes.Status502BadGateway,
-                new { error = "Could not reach Business Central", detail = ex.Message });
-        }
-    }
+        CancellationToken ct = default) =>
+        Ok(await _bc.GetPostedSalesInvoicesAsync(number, top, ct));
 
     [HttpGet("invoices/{invoiceId:guid}/lines")]
-    public async Task<IActionResult> GetInvoiceLines(Guid invoiceId, CancellationToken ct)
-    {
-        try
-        {
-            return Ok(await businessCentralClient.GetSalesInvoiceLinesAsync(invoiceId, ct));
-        }
-        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
-        {
-            return NotFound();
-        }
-        catch (HttpRequestException ex)
-        {
-            return StatusCode(
-                StatusCodes.Status502BadGateway,
-                new { error = "Could not reach Business Central", detail = ex.Message });
-        }
-    }
+    public async Task<IActionResult> GetInvoiceLines(Guid invoiceId, CancellationToken ct) =>
+        Ok(await _bc.GetSalesInvoiceLinesAsync(invoiceId, ct));
 }

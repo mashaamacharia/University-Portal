@@ -1,26 +1,34 @@
-using System.Net.Http.Json;
+using System.Net;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
 using UniversityPortal.API.Integrations.BusinessCentral.Configuration;
 using UniversityPortal.API.Integrations.BusinessCentral.DTOs;
+using UniversityPortal.API.Integrations.BusinessCentral.Exceptions;
+using UniversityPortal.API.Common.Exceptions;
+using Polly.CircuitBreaker;
+using Polly.Timeout;
 
 namespace UniversityPortal.API.Integrations.BusinessCentral.Clients;
 
-public class BusinessCentralClient(
-    HttpClient http,
-    IOptions<BusinessCentralOptions> options) : IBusinessCentralClient
+public class BusinessCentralClient : IBusinessCentralClient
 {
-    private static readonly string[] PostedStatuses = ["Open", "Paid", "Corrective"];
-    private static readonly HashSet<string> PostedStatusSet =
-        new(PostedStatuses, StringComparer.OrdinalIgnoreCase);
+    private static readonly string[] PostedStatuses = { "Open", "Paid", "Corrective" };
+    private static readonly HashSet<string> PostedStatusSet = new(PostedStatuses, StringComparer.OrdinalIgnoreCase);
 
-    private readonly BusinessCentralOptions _options = options.Value;
+    private readonly HttpClient _http;
+    private readonly BusinessCentralOptions _options;
 
-    private string CompanyPath(string resource) =>
-        $"companies({_options.CompanyId})/{resource}";
+    public BusinessCentralClient(HttpClient http, IOptions<BusinessCentralOptions> options)
+    {
+        _http = http;
+        _options = options.Value;
+    }
+
+    private string CompanyPath(string resource) => $"companies({_options.CompanyId})/{resource}";
 
     public async Task<IReadOnlyList<BcCompanyDto>> GetCompaniesAsync(CancellationToken ct = default)
     {
-        var response = await http.GetFromJsonAsync<BcListResponse<BcCompanyDto>>("companies", ct);
+        var response = await GetAsync<BcListResponse<BcCompanyDto>>("companies", ct);
         return response?.Value ?? [];
     }
 
@@ -29,11 +37,10 @@ public class BusinessCentralClient(
         int skip = 0,
         CancellationToken ct = default)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(top);
-        ArgumentOutOfRangeException.ThrowIfNegative(skip);
+        ValidatePage(top, skip);
 
         var url = CompanyPath($"customers?$top={top}&$skip={skip}");
-        var response = await http.GetFromJsonAsync<BcListResponse<BcCustomerDto>>(url, ct);
+        var response = await GetAsync<BcListResponse<BcCustomerDto>>(url, ct);
         return response?.Value ?? [];
     }
 
@@ -41,13 +48,13 @@ public class BusinessCentralClient(
         string customerNumber,
         CancellationToken ct = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(customerNumber);
+        ValidateCustomerNumber(customerNumber);
 
         var safeCustomerNumber = customerNumber.Replace("'", "''", StringComparison.Ordinal);
         var filter = Uri.EscapeDataString($"number eq '{safeCustomerNumber}'");
         var url = CompanyPath($"customerFinancialDetails?$filter={filter}");
 
-        var response = await http.GetFromJsonAsync<BcListResponse<BcCustomerFinancialDetailsDto>>(url, ct);
+        var response = await GetAsync<BcListResponse<BcCustomerFinancialDetailsDto>>(url, ct);
         return response?.Value.FirstOrDefault();
     }
 
@@ -56,8 +63,8 @@ public class BusinessCentralClient(
         int top = 50,
         CancellationToken ct = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(customerNumber);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(top);
+        ValidateCustomerNumber(customerNumber);
+        ValidatePage(top, 0);
 
         var safeCustomerNumber = customerNumber.Replace("'", "''", StringComparison.Ordinal);
         var statusFilter = string.Join(" or ", PostedStatuses.Select(status => $"status eq '{status}'"));
@@ -66,7 +73,7 @@ public class BusinessCentralClient(
         var orderBy = Uri.EscapeDataString("postingDate desc");
         var url = CompanyPath($"salesInvoices?$filter={filter}&$orderby={orderBy}&$top={top}");
 
-        var response = await http.GetFromJsonAsync<BcListResponse<BcSalesInvoiceDto>>(url, ct);
+        var response = await GetAsync<BcListResponse<BcSalesInvoiceDto>>(url, ct);
         return response?.Value
             .Where(invoice => PostedStatusSet.Contains(invoice.Status))
             .ToList() ?? [];
@@ -77,7 +84,94 @@ public class BusinessCentralClient(
         CancellationToken ct = default)
     {
         var url = CompanyPath($"salesInvoices({invoiceId})/salesInvoiceLines");
-        var response = await http.GetFromJsonAsync<BcListResponse<BcSalesInvoiceLineDto>>(url, ct);
+        var response = await GetAsync<BcListResponse<BcSalesInvoiceLineDto>>(url, ct);
         return response?.Value ?? [];
     }
+
+    private async Task<T?> GetAsync<T>(string url, CancellationToken ct)
+    {
+        var path = url.Split('?')[0];
+
+        try
+        {
+            using var response = await _http.GetAsync(url, ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync(ct);
+                var snippet = body.Length > 300 ? body[..300] : body;
+                throw new BcIntegrationException(
+                    MapKind(response.StatusCode),
+                    $"BC returned {(int)response.StatusCode} for GET {path}. Body: {snippet}",
+                    response.StatusCode);
+            }
+
+            return await response.Content.ReadFromJsonAsync<T>(cancellationToken: ct);
+        }
+        catch (TimeoutRejectedException ex)
+        {
+            throw new BcIntegrationException(
+                BcFailureKind.Timeout,
+                $"BC timed out (after retries) for GET {path}",
+                inner: ex);
+        }
+        catch (BrokenCircuitException ex)
+        {
+            throw new BcIntegrationException(
+                BcFailureKind.Unreachable,
+                $"BC circuit is open for GET {path}",
+                inner: ex);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new BcIntegrationException(
+                BcFailureKind.Unreachable,
+                $"Could not reach BC for GET {path}",
+                inner: ex);
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new BcIntegrationException(
+                BcFailureKind.Timeout,
+                $"BC timed out for GET {path}",
+                inner: ex);
+        }
+        catch (JsonException ex)
+        {
+            throw new BcIntegrationException(
+                BcFailureKind.InvalidResponse,
+                $"BC returned unreadable JSON for GET {path}",
+                inner: ex);
+        }
+    }
+
+    private static void ValidateCustomerNumber(string customerNumber)
+    {
+        if (string.IsNullOrWhiteSpace(customerNumber))
+        {
+            throw new PortalException(
+                StatusCodes.Status400BadRequest,
+                "Invalid customer number",
+                "A customer number is required.");
+        }
+    }
+
+    private static void ValidatePage(int top, int skip)
+    {
+        if (top <= 0 || skip < 0)
+        {
+            throw new PortalException(
+                StatusCodes.Status400BadRequest,
+                "Invalid pagination",
+                "The top value must be greater than zero and skip cannot be negative.");
+        }
+    }
+
+    private static BcFailureKind MapKind(HttpStatusCode code) => code switch
+    {
+        HttpStatusCode.NotFound => BcFailureKind.NotFound,
+        HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => BcFailureKind.AccessDenied,
+        _ when (int)code >= 500 => BcFailureKind.ServerError,
+        _ => BcFailureKind.Rejected
+    };
 }
