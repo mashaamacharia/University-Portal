@@ -11,6 +11,8 @@ public interface IBusinessCentralClient
         int skip = 0,
         CancellationToken ct = default);
 
+    Task<BcCustomerDto?> GetCustomerByNumberAsync(string customerNumber, CancellationToken ct = default);
+
     Task<BcCustomerFinancialDetailsDto?> GetCustomerFinancialDetailsAsync(
         string customerNumber,
         CancellationToken ct = default);
@@ -18,6 +20,11 @@ public interface IBusinessCentralClient
     Task<IReadOnlyList<BcSalesInvoiceDto>> GetPostedSalesInvoicesAsync(
         string customerNumber,
         int top = 50,
+        CancellationToken ct = default);
+
+    Task<BcSalesInvoiceDto?> GetPostedSalesInvoiceByNumberAsync(
+        string customerNumber,
+        string invoiceNumber,
         CancellationToken ct = default);
 
     Task<IReadOnlyList<BcSalesInvoiceLineDto>> GetSalesInvoiceLinesAsync(

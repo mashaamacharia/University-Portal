@@ -1,403 +1,350 @@
 
-1. The exception types
+1. Shared pieces
 
-Common/Exceptions/PortalException.cs
+Common/Constants/Roles.cs
+
+csharp
+namespace UniversityPortal.API.Common.Constants;
+
+public static class Roles
+{
+    public const string Student = "Student";
+    public const string FinanceOfficer = "FinanceOfficer";
+    public const string Administrator = "Administrator";
+}
+
+Common/Responses/PagedResult.cs
+
+csharp
+namespace UniversityPortal.API.Common.Responses;
+
+public record PagedResult<T></t>(IReadOnlyList<T></t> Items, int Page, int PageSize, int TotalCount)
+{
+    public int TotalPages => PageSize <= 0 ? 0 : (int)Math.Ceiling(TotalCount / (double)PageSize);
+}
+
+Common/Exceptions/ForbiddenException.cs
 
 csharp
 namespace UniversityPortal.API.Common.Exceptions;
+
+public class ForbiddenException : PortalException
+{
+    public ForbiddenException(string logMessage)
+        : base(403, "Forbidden", "You do not have permission to perform this action.", logMessage) { }
+}
+
+Replace Common/Security/ICurrentUser.cs and the two stand-in classes:
+
+csharp
+namespace UniversityPortal.API.Common.Security;
+
+public interface ICurrentUser
+{
+    bool IsAuthenticated { get; }
+
+    /// 
+
+
+    string? StudentNumber { get; }
+
+    bool IsInRole(string role);
+}
 
 /// 
 
 
-
-
-
-
-public class PortalException : Exception
+public class DevCurrentUser : ICurrentUser
 {
-    public int StatusCode { get; }
-    public string Title { get; }
-    public string PublicDetail { get; }
+    private readonly HashSet<string></string> _roles;
 
-    public PortalException(
-        int statusCode, string title, string publicDetail,
-        string? logMessage = null, Exception? inner = null)
-        : base(logMessage ?? publicDetail, inner)
+    public DevCurrentUser(IConfiguration configuration)
     {
-        StatusCode = statusCode;
-        Title = title;
-        PublicDetail = publicDetail;
+        StudentNumber = configuration["DevIdentity:StudentNumber"];
+        _roles = (configuration.GetSection("DevIdentity:Roles").Get<string[]>() ?? Array.Empty<string></string>())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    public string? StudentNumber { get; }
+    public bool IsAuthenticated => StudentNumber is not null || _roles.Count > 0;
+    public bool IsInRole(string role) => _roles.Contains(role);
+}
+
+/// 
+
+
+public class AnonymousCurrentUser : ICurrentUser
+{
+    public bool IsAuthenticated => false;
+    public string? StudentNumber => null;
+    public bool IsInRole(string role) => false;
+}
+
+(If you kept the stand-ins in one file, replace that file’s contents. The names haven’t changed.)
+
+2. BC integration: a filtered, counted invoice query
+
+Add to BcListResponse<T></t>, beside Value:
+
+csharp
+[JsonPropertyName("@odata.count")]
+public int? Count { get; set; }
+
+New DTOs in Integrations/BusinessCentral/DTOs/:
+
+csharp
+// BcPagedList.cs
+namespace UniversityPortal.API.Integrations.BusinessCentral.DTOs;
+
+public record BcPagedList<T></t>(IReadOnlyList<T></t> Items, int? TotalCount);
+csharp
+// BcInvoiceQuery.cs
+namespace UniversityPortal.API.Integrations.BusinessCentral.DTOs;
+
+/// 
+
+
+public record BcInvoiceQuery(
+    string? CustomerNumber,
+    IReadOnlyList<string></string>? Statuses,
+    DateOnly? From,
+    DateOnly? To,
+    int Skip,
+    int Top);
+
+Add to IBusinessCentralClient:
+
+csharp
+Task<BcPagedList<BcSalesInvoiceDto></bcsalesinvoicedto>> QuerySalesInvoicesAsync(
+    BcInvoiceQuery query, CancellationToken ct = default);
+
+Add to BusinessCentralClient:
+
+csharp
+// For officer views: any status, drafts included. Never expose this directly to students.
+public async Task<BcPagedList<BcSalesInvoiceDto></bcsalesinvoicedto>> QuerySalesInvoicesAsync(
+    BcInvoiceQuery q, CancellationToken ct = default)
+{
+    var clauses = new List<string></string>();
+
+    if (!string.IsNullOrWhiteSpace(q.CustomerNumber))
+        clauses.Add($"customerNumber eq '{q.CustomerNumber.Replace("'", "''")}'");
+
+    if (q.Statuses is { Count: > 0 })
+        clauses.Add("(" + string.Join(" or ",
+            q.Statuses.Select(s => $"status eq '{s.Replace("'", "''")}'")) + ")");
+
+    // invoiceDate is set on drafts too, unlike postingDate on some documents
+    if (q.From is { } from) clauses.Add($"invoiceDate ge {from:yyyy-MM-dd}");
+    if (q.To is { } to) clauses.Add($"invoiceDate le {to:yyyy-MM-dd}");
+
+    var parts = new List<string></string>
+    {
+        "$count=true",
+        $"$top={q.Top}",
+        $"$skip={q.Skip}",
+        // number as tie-breaker keeps page boundaries stable
+        "$orderby=" + Uri.EscapeDataString("invoiceDate desc,number desc")
+    };
+    if (clauses.Count > 0)
+        parts.Add("$filter=" + Uri.EscapeDataString(string.Join(" and ", clauses)));
+
+    var response = await GetAsync<BcListResponse<BcSalesInvoiceDto></bcsalesinvoicedto>>(
+        CompanyPath("salesInvoices?" + string.Join("&", parts)), ct);
+
+    return new BcPagedList<BcSalesInvoiceDto></bcsalesinvoicedto>(
+        response?.Value ?? new List<BcSalesInvoiceDto></bcsalesinvoicedto>(), response?.Count);
+}
+3. Finance module additions
+
+Add to DTOs/FinanceDtos.cs (plus using System.ComponentModel.DataAnnotations; at the top):
+
+csharp
+public enum InvoiceStatus { Draft, InReview, Open, Paid, Corrective, Canceled }
+
+public record OfficerInvoiceDto(
+    string InvoiceNumber,
+    string StudentNumber,
+    string StudentName,
+    DateOnly InvoiceDate,
+    DateOnly DueDate,
+    string CurrencyCode,
+    decimal TotalAmount,
+    decimal AmountRemaining,
+    InvoiceStatus Status,
+    PaymentStatus? PaymentStatus);   // null until the invoice is posted
+
+public class OfficerInvoiceQuery : IValidatableObject
+{
+    public InvoiceStatus? Status { get; set; }
+
+    [StringLength(20)]
+    public string? CustomerNumber { get; set; }
+
+    public DateOnly? From { get; set; }
+    public DateOnly? To { get; set; }
+
+    [Range(1, 10000)]
+    public int Page { get; set; } = 1;
+
+    [Range(1, 100)]
+    public int PageSize { get; set; } = 25;
+
+    public IEnumerable<ValidationResult></validationresult> Validate(ValidationContext context)
+    {
+        if (From is { } f && To is { } t && f > t)
+            yield return new ValidationResult(
+                "'From' must not be after 'To'.", new[] { nameof(From), nameof(To) });
     }
 }
 
-Common/Exceptions/GlobalExceptionHandler.cs
+Add to FinanceMapper (plus using UniversityPortal.API.Integrations.BusinessCentral.Exceptions;):
 
 csharp
-using Microsoft.AspNetCore.Diagnostics;
-using Microsoft.AspNetCore.Mvc;
-
-namespace UniversityPortal.API.Common.Exceptions;
-
-public class GlobalExceptionHandler : IExceptionHandler
+public static string ToBcStatus(InvoiceStatus status) => status switch
 {
-    private readonly IProblemDetailsService _problemDetails;
-    private readonly ILogger<GlobalExceptionHandler></globalexceptionhandler> _logger;
+    InvoiceStatus.Draft => "Draft",
+    InvoiceStatus.InReview => "In Review",
+    InvoiceStatus.Open => "Open",
+    InvoiceStatus.Paid => "Paid",
+    InvoiceStatus.Corrective => "Corrective",
+    InvoiceStatus.Canceled => "Canceled",
+    _ => throw new ArgumentOutOfRangeException(nameof(status))
+};
 
-    public GlobalExceptionHandler(
-        IProblemDetailsService problemDetails, ILogger<GlobalExceptionHandler></globalexceptionhandler> logger)
-    {
-        _problemDetails = problemDetails;
-        _logger = logger;
-    }
+// An unknown status must fail loudly: guessing could treat an unposted invoice as posted
+public static InvoiceStatus ParseStatus(string bcStatus) => bcStatus switch
+{
+    "Draft" => InvoiceStatus.Draft,
+    "In Review" => InvoiceStatus.InReview,
+    "Open" => InvoiceStatus.Open,
+    "Paid" => InvoiceStatus.Paid,
+    "Corrective" => InvoiceStatus.Corrective,
+    "Canceled" => InvoiceStatus.Canceled,
+    _ => throw new BcIntegrationException(
+        BcFailureKind.InvalidResponse, $"Unknown BC invoice status '{bcStatus}'")
+};
 
-    public async ValueTask<bool></bool> TryHandleAsync(
-        HttpContext context, Exception exception, CancellationToken ct)
-    {
-        // The caller disconnected. Nothing to respond to, nothing to log as an error.
-        if (exception is OperationCanceledException && context.RequestAborted.IsCancellationRequested)
-            return true;
+public static OfficerInvoiceDto ToOfficerInvoice(BcSalesInvoiceDto bc, DateOnly today)
+{
+    var status = ParseStatus(bc.Status);
+    var posted = status is InvoiceStatus.Open or InvoiceStatus.Paid or InvoiceStatus.Corrective;
 
-        int status;
-        string title;
-        string detail;
-
-        if (exception is PortalException pe)
-        {
-            status = pe.StatusCode;
-            title = pe.Title;
-            detail = pe.PublicDetail;
-        }
-        else
-        {
-            status = StatusCodes.Status500InternalServerError;
-            title = "Unexpected error";
-            detail = "An unexpected error occurred. Quote the traceId when reporting this.";
-        }
-
-        if (status >= 500)
-            _logger.LogError(exception, "Request failed with {Status}: {Title}", status, title);
-        else
-            _logger.LogWarning("Request failed with {Status}: {Message}", status, exception.Message);
-
-        context.Response.StatusCode = status;
-        return await _problemDetails.TryWriteAsync(new ProblemDetailsContext
-        {
-            HttpContext = context,
-            Exception = exception,
-            ProblemDetails = new ProblemDetails { Status = status, Title = title, Detail = detail }
-        });
-    }
+    return new OfficerInvoiceDto(
+        InvoiceNumber: bc.Number,
+        StudentNumber: bc.CustomerNumber,
+        StudentName: bc.CustomerName,
+        InvoiceDate: bc.InvoiceDate,
+        DueDate: bc.DueDate,
+        CurrencyCode: bc.CurrencyCode,
+        TotalAmount: bc.TotalAmountIncludingTax,
+        AmountRemaining: bc.RemainingAmount,
+        Status: status,
+        PaymentStatus: posted
+            ? ComputeStatus(bc.TotalAmountIncludingTax, bc.RemainingAmount, bc.DueDate, today)
+            : null);
 }
 
-The built-in problem details service adds a traceId to every response, which lets you match what a caller saw to a log entry.
-
-Integrations/BusinessCentral/Exceptions/BcIntegrationException.cs (a small new folder; we’ll note it in the docs)
+Services/IOfficerFinanceService.cs
 
 csharp
-using System.Net;
+using UniversityPortal.API.Common.Responses;
+using UniversityPortal.API.Modules.Finance.DTOs;
+
+namespace UniversityPortal.API.Modules.Finance.Services;
+
+public interface IOfficerFinanceService
+{
+    Task<PagedResult<OfficerInvoiceDto></officerinvoicedto>> GetInvoicesAsync(OfficerInvoiceQuery query, CancellationToken ct);
+}
+
+Services/OfficerFinanceService.cs
+
+csharp
+using UniversityPortal.API.Common.Constants;
 using UniversityPortal.API.Common.Exceptions;
-
-namespace UniversityPortal.API.Integrations.BusinessCentral.Exceptions;
-
-public enum BcFailureKind
-{
-    Unreachable, Timeout, NotFound, AccessDenied, Rejected, ServerError, InvalidResponse
-}
-
-public class BcIntegrationException : PortalException
-{
-    public BcFailureKind Kind { get; }
-    public HttpStatusCode? BcStatusCode { get; }
-
-    public BcIntegrationException(
-        BcFailureKind kind, string logMessage,
-        HttpStatusCode? bcStatusCode = null, Exception? inner = null)
-        : base(ToStatus(kind), ToTitle(kind), ToDetail(kind), logMessage, inner)
-    {
-        Kind = kind;
-        BcStatusCode = bcStatusCode;
-    }
-
-    private static int ToStatus(BcFailureKind kind) => kind switch
-    {
-        BcFailureKind.NotFound => 404,
-        BcFailureKind.Timeout => 504,
-        _ => 502
-    };
-
-    private static string ToTitle(BcFailureKind kind) => kind switch
-    {
-        BcFailureKind.NotFound => "Record not found",
-        BcFailureKind.Timeout => "Business Central timed out",
-        BcFailureKind.AccessDenied => "Business Central access denied",
-        BcFailureKind.Rejected => "Business Central rejected the request",
-        BcFailureKind.InvalidResponse => "Unexpected Business Central response",
-        _ => "Business Central unavailable"
-    };
-
-    private static string ToDetail(BcFailureKind kind) => kind switch
-    {
-        BcFailureKind.NotFound => "The requested record does not exist.",
-        BcFailureKind.Timeout => "Business Central did not respond in time. Try again shortly.",
-        _ => "The portal could not complete this request with Business Central. Try again, and contact support if it continues."
-    };
-}
-
-Callers see only the generic text. The specifics (status, BC’s message) stay in the logs.
-
-2. Logging every BC call
-
-Integrations/BusinessCentral/Clients/BusinessCentralLoggingHandler.cs
-
-csharp
-using System.Diagnostics;
-
-namespace UniversityPortal.API.Integrations.BusinessCentral.Clients;
-
-public class BusinessCentralLoggingHandler : DelegatingHandler
-{
-    private readonly ILogger<BusinessCentralLoggingHandler></businesscentrallogginghandler> _logger;
-
-    public BusinessCentralLoggingHandler(ILogger<BusinessCentralLoggingHandler></businesscentrallogginghandler> logger)
-    {
-        _logger = logger;
-    }
-
-    protected override async Task<HttpResponseMessage></httpresponsemessage> SendAsync(
-        HttpRequestMessage request, CancellationToken ct)
-    {
-        var sw = Stopwatch.StartNew();
-        try
-        {
-            var response = await base.SendAsync(request, ct);
-            _logger.LogInformation("BC {Method} {Path} -> {Status} in {ElapsedMs} ms",
-                request.Method, request.RequestUri?.AbsolutePath,
-                (int)response.StatusCode, sw.ElapsedMilliseconds);
-            return response;
-        }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
-        {
-            _logger.LogError(ex, "BC {Method} {Path} failed after {ElapsedMs} ms",
-                request.Method, request.RequestUri?.AbsolutePath, sw.ElapsedMilliseconds);
-            throw;
-        }
-    }
-}
-
-It logs the path only, never the query string. The query is where student numbers appear in our filters, so personal identifiers stay out of the logs.
-
-Register it in ServiceCollectionExtensions, by adding one line before AddHttpClient and one in the chain:
-
-csharp
-services.AddTransient<BusinessCentralLoggingHandler></businesscentrallogginghandler>();
-
-services.AddHttpClient<IBusinessCentralClient, BusinessCentralClient>(client =>
-{
-    client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
-    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-})
-.AddHttpMessageHandler<BusinessCentralLoggingHandler></businesscentrallogginghandler>()
-.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-{
-    UseDefaultCredentials = options.AuthMode == "Windows"
-});
-
-You’ll also need using UniversityPortal.API.Integrations.BusinessCentral.Clients; (already there) and nothing else. In appsettings.Development.json, add this under Logging:LogLevel to silence the framework’s own chatty HttpClient lines, since we now produce our own:
-
-json
-"System.Net.Http.HttpClient": "Warning"
-3. The client translates failures
-
-Replace BusinessCentralClient with this version. All requests now go through one GetAsync<T></t> helper that turns every failure into a BcIntegrationException:
-
-csharp
-using System.Net;
-using System.Net.Http.Json;
-using System.Text.Json;
-using Microsoft.Extensions.Options;
-using UniversityPortal.API.Integrations.BusinessCentral.Configuration;
-using UniversityPortal.API.Integrations.BusinessCentral.DTOs;
-using UniversityPortal.API.Integrations.BusinessCentral.Exceptions;
-
-namespace UniversityPortal.API.Integrations.BusinessCentral.Clients;
-
-public class BusinessCentralClient : IBusinessCentralClient
-{
-    // Only these statuses are posted. Draft and In Review must never reach students.
-    private static readonly string[] PostedStatuses = { "Open", "Paid", "Corrective" };
-
-    private readonly HttpClient _http;
-    private readonly BusinessCentralOptions _options;
-
-    public BusinessCentralClient(HttpClient http, IOptions<BusinessCentralOptions></businesscentraloptions> options)
-    {
-        _http = http;
-        _options = options.Value;
-    }
-
-    private string CompanyPath(string resource) =>
-        $"companies({_options.CompanyId})/{resource}";
-
-    public async Task<IReadOnlyList<BcCompanyDto></bccompanydto>> GetCompaniesAsync(CancellationToken ct = default)
-    {
-        var response = await GetAsync<BcListResponse<BcCompanyDto></bccompanydto>>("companies", ct);
-        return response?.Value ?? new List<BcCompanyDto></bccompanydto>();
-    }
-
-    public async Task<IReadOnlyList<BcCustomerDto></bccustomerdto>> GetCustomersAsync(
-        int top = 50, int skip = 0, CancellationToken ct = default)
-    {
-        var url = CompanyPath($"customers?$top={top}&$skip={skip}");
-        var response = await GetAsync<BcListResponse<BcCustomerDto></bccustomerdto>>(url, ct);
-        return response?.Value ?? new List<BcCustomerDto></bccustomerdto>();
-    }
-
-    public async Task<BcCustomerFinancialDetailsDto?> GetCustomerFinancialDetailsAsync(
-        string customerNumber, CancellationToken ct = default)
-    {
-        var safe = customerNumber.Replace("'", "''");
-        var filter = Uri.EscapeDataString($"number eq '{safe}'");
-        var url = CompanyPath($"customerFinancialDetails?$filter={filter}");
-
-        var response = await GetAsync<BcListResponse<BcCustomerFinancialDetailsDto></bccustomerfinancialdetailsdto>>(url, ct);
-        return response?.Value.FirstOrDefault();
-    }
-
-    public async Task<IReadOnlyList<BcSalesInvoiceDto></bcsalesinvoicedto>> GetPostedSalesInvoicesAsync(
-        string customerNumber, int top = 50, CancellationToken ct = default)
-    {
-        var safe = customerNumber.Replace("'", "''");
-        var statusFilter = string.Join(" or ", PostedStatuses.Select(s => $"status eq '{s}'"));
-        var filter = Uri.EscapeDataString($"customerNumber eq '{safe}' and ({statusFilter})");
-        var orderBy = Uri.EscapeDataString("postingDate desc");
-
-        var url = CompanyPath($"salesInvoices?$filter={filter}&$orderby={orderBy}&$top={top}");
-        var response = await GetAsync<BcListResponse<BcSalesInvoiceDto></bcsalesinvoicedto>>(url, ct);
-        return response?.Value ?? new List<BcSalesInvoiceDto></bcsalesinvoicedto>();
-    }
-
-    public async Task<IReadOnlyList<BcSalesInvoiceLineDto></bcsalesinvoicelinedto>> GetSalesInvoiceLinesAsync(
-        Guid invoiceId, CancellationToken ct = default)
-    {
-        var url = CompanyPath($"salesInvoices({invoiceId})/salesInvoiceLines");
-        var response = await GetAsync<BcListResponse<BcSalesInvoiceLineDto></bcsalesinvoicelinedto>>(url, ct);
-        return response?.Value ?? new List<BcSalesInvoiceLineDto></bcsalesinvoicelinedto>();
-    }
-
-    // Every read goes through here so failures are translated in exactly one place.
-    private async Task<T?> GetAsync<T></t>(string url, CancellationToken ct)
-    {
-        var path = url.Split('?')[0]; // never put the query (student numbers) in messages
-        try
-        {
-            using var response = await _http.GetAsync(url, ct);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var body = await response.Content.ReadAsStringAsync(ct);
-                var snippet = body.Length > 300 ? body[..300] : body;
-                throw new BcIntegrationException(
-                    MapKind(response.StatusCode),
-                    $"BC returned {(int)response.StatusCode} for GET {path}. Body: {snippet}",
-                    response.StatusCode);
-            }
-
-            return await response.Content.ReadFromJsonAsync<T></t>(ct);
-        }
-        catch (HttpRequestException ex)
-        {
-            throw new BcIntegrationException(
-                BcFailureKind.Unreachable, $"Could not reach BC for GET {path}", null, ex);
-        }
-        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
-        {
-            // Not the caller disconnecting, so this is the HttpClient timeout
-            throw new BcIntegrationException(
-                BcFailureKind.Timeout, $"BC timed out for GET {path}", null, ex);
-        }
-        catch (JsonException ex)
-        {
-            throw new BcIntegrationException(
-                BcFailureKind.InvalidResponse, $"BC returned unreadable JSON for GET {path}", null, ex);
-        }
-    }
-
-    private static BcFailureKind MapKind(HttpStatusCode code) => code switch
-    {
-        HttpStatusCode.NotFound => BcFailureKind.NotFound,
-        HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => BcFailureKind.AccessDenied,
-        >= HttpStatusCode.InternalServerError => BcFailureKind.ServerError,
-        _ => BcFailureKind.Rejected
-    };
-}
-4. Simplify the diagnostics controller
-
-The try/catch blocks are no longer needed, because the handler produces the error response:
-
-csharp
-using Microsoft.AspNetCore.Mvc;
+using UniversityPortal.API.Common.Responses;
+using UniversityPortal.API.Common.Security;
 using UniversityPortal.API.Integrations.BusinessCentral.Clients;
+using UniversityPortal.API.Integrations.BusinessCentral.DTOs;
+using UniversityPortal.API.Modules.Finance.DTOs;
 
-namespace UniversityPortal.API.Common.Health;
+namespace UniversityPortal.API.Modules.Finance.Services;
 
-[ApiController]
-[Route("api/diagnostics/business-central")]
-public class BusinessCentralDiagnosticsController : ControllerBase
+public class OfficerFinanceService : IOfficerFinanceService
 {
     private readonly IBusinessCentralClient _bc;
+    private readonly ICurrentUser _user;
+    private readonly TimeProvider _time;
 
-    public BusinessCentralDiagnosticsController(IBusinessCentralClient bc)
+    public OfficerFinanceService(IBusinessCentralClient bc, ICurrentUser user, TimeProvider time)
     {
         _bc = bc;
+        _user = user;
+        _time = time;
     }
 
-    [HttpGet("companies")]
-    public async Task<IActionResult></iactionresult> GetCompanies(CancellationToken ct) =>
-        Ok(await _bc.GetCompaniesAsync(ct));
-
-    [HttpGet("customers")]
-    public async Task<IActionResult></iactionresult> GetCustomers([FromQuery] int top = 10, CancellationToken ct = default) =>
-        Ok(await _bc.GetCustomersAsync(top, 0, ct));
-
-    [HttpGet("customers/{number}/financial-details")]
-    public async Task<IActionResult></iactionresult> GetFinancialDetails(string number, CancellationToken ct)
+    private void RequireOfficer()
     {
-        var details = await _bc.GetCustomerFinancialDetailsAsync(number, ct);
-        return details is null ? NotFound() : Ok(details);
+        if (!_user.IsAuthenticated) throw new NotAuthenticatedException();
+        if (!_user.IsInRole(Roles.FinanceOfficer))
+            throw new ForbiddenException("Caller is not in the FinanceOfficer role");
     }
 
-    [HttpGet("customers/{number}/invoices")]
-    public async Task<IActionResult></iactionresult> GetInvoices(string number, [FromQuery] int top = 20, CancellationToken ct = default) =>
-        Ok(await _bc.GetPostedSalesInvoicesAsync(number, top, ct));
+    public async Task<PagedResult<OfficerInvoiceDto></officerinvoicedto>> GetInvoicesAsync(
+        OfficerInvoiceQuery query, CancellationToken ct)
+    {
+        RequireOfficer();
 
-    [HttpGet("invoices/{invoiceId:guid}/lines")]
-    public async Task<IActionResult></iactionresult> GetInvoiceLines(Guid invoiceId, CancellationToken ct) =>
-        Ok(await _bc.GetSalesInvoiceLinesAsync(invoiceId, ct));
+        var skip = (query.Page - 1) * query.PageSize;
+        var statuses = query.Status is { } s ? new[] { FinanceMapper.ToBcStatus(s) } : null;
+
+        var page = await _bc.QuerySalesInvoicesAsync(
+            new BcInvoiceQuery(query.CustomerNumber, statuses, query.From, query.To, skip, query.PageSize), ct);
+
+        var today = DateOnly.FromDateTime(_time.GetUtcNow().UtcDateTime);
+        var items = page.Items.Select(i => FinanceMapper.ToOfficerInvoice(i, today)).ToList();
+
+        // If BC ever omits the count, fall back to what we know rather than reporting 0
+        return new PagedResult<OfficerInvoiceDto></officerinvoicedto>(
+            items, query.Page, query.PageSize, page.TotalCount ?? skip + items.Count);
+    }
 }
-5. Wire it into Program.cs
+
+Controllers/OfficerFinanceController.cs
+
 csharp
-using UniversityPortal.API.Common.Exceptions;
-using UniversityPortal.API.Integrations.BusinessCentral.Configuration;
+using Microsoft.AspNetCore.Mvc;
+using UniversityPortal.API.Common.Responses;
+using UniversityPortal.API.Modules.Finance.DTOs;
+using UniversityPortal.API.Modules.Finance.Services;
 
-var builder = WebApplication.CreateBuilder(args);
+namespace UniversityPortal.API.Modules.Finance.Controllers;
 
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
-builder.Services.AddProblemDetails();
-builder.Services.AddExceptionHandler<GlobalExceptionHandler></globalexceptionhandler>();
-builder.Services.AddBusinessCentralIntegration(builder.Configuration);
-
-var app = builder.Build();
-
-app.UseExceptionHandler();   // must come first so it wraps everything below
-
-if (app.Environment.IsDevelopment())
+// S5 adds [Authorize(Roles = Roles.FinanceOfficer)] here
+[ApiController]
+[Route("api/officer/finance")]
+public class OfficerFinanceController : ControllerBase
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    private readonly IOfficerFinanceService _finance;
+
+    public OfficerFinanceController(IOfficerFinanceService finance)
+    {
+        _finance = finance;
+    }
+
+    [HttpGet("invoices")]
+    public async Task<ActionResult<PagedResult<OfficerInvoiceDto></officerinvoicedto>>> GetInvoices(
+        [FromQuery] OfficerInvoiceQuery query, CancellationToken ct) =>
+        Ok(await _finance.GetInvoicesAsync(query, ct));
 }
 
-app.UseHttpsRedirection();
-app.MapControllers();
-app.Run();
+Register it in FinanceModuleExtensions, by adding the line services.AddScoped<IOfficerFinanceService, OfficerFinanceService>(); below the student one.
+
+Dev identity in appsettings.Development.json. Keep the student number so both sides can be tested:
+
+json
+"DevIdentity": {
+  "StudentNumber": "20000",
+  "Roles": [ "Student", "FinanceOfficer" ]
+}
