@@ -114,6 +114,104 @@ public class BusinessCentralClient : IBusinessCentralClient
         return response?.Value.FirstOrDefault();
     }
 
+    public async Task<BcPagedList<BcSalesInvoiceDto>> QuerySalesInvoicesAsync(
+        BcInvoiceQuery q,
+        CancellationToken ct = default)
+    {
+        var clauses = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(q.CustomerNumber))
+            clauses.Add($"customerNumber eq '{q.CustomerNumber.Replace("'", "''")}'");
+
+        if (q.Statuses is { Count: > 0 })
+        {
+            var statusGroup = "(" + string.Join(" or ", q.Statuses
+                .Select(s => $"status eq '{s.Replace("'", "''")}'")) + ")";
+            clauses.Add(statusGroup);
+        }
+
+        if (q.From is { } from)
+            clauses.Add($"invoiceDate ge {from:yyyy-MM-dd}");
+
+        if (q.To is { } to)
+            clauses.Add($"invoiceDate le {to:yyyy-MM-dd}");
+
+        var parts = new List<string>
+        {
+            "$count=true",
+            $"$top={q.Top}",
+            $"$skip={q.Skip}",
+            "$orderby=" + Uri.EscapeDataString("invoiceDate desc,number desc")
+        };
+
+        if (clauses.Count > 0)
+            parts.Add("$filter=" + Uri.EscapeDataString(string.Join(" and ", clauses)));
+
+        var response = await GetAsync<BcListResponse<BcSalesInvoiceDto>>(
+            CompanyPath("salesInvoices?" + string.Join("&", parts)),
+            ct);
+
+        return new BcPagedList<BcSalesInvoiceDto>(
+            response?.Value ?? [],
+            response?.Count);
+    }
+
+    public async Task<BcPagedList<BcCustomerFinancialDetailsDto>> QueryCustomerFinancialDetailsAsync(
+        BcBalanceQuery q,
+        CancellationToken ct = default)
+    {
+        var clauses = new List<string>
+        {
+            FormattableString.Invariant($"balance gt {q.MinBalance}")
+        };
+
+        if (q.OverdueOnly)
+            clauses.Add("overdueAmount gt 0");
+
+        var parts = new List<string>
+        {
+            "$count=true",
+            $"$top={q.Top}",
+            $"$skip={q.Skip}",
+            "$orderby=" + Uri.EscapeDataString("balance desc,number asc"),
+            "$filter=" + Uri.EscapeDataString(string.Join(" and ", clauses))
+        };
+
+        var response = await GetAsync<BcListResponse<BcCustomerFinancialDetailsDto>>(
+            CompanyPath("customerFinancialDetails?" + string.Join("&", parts)),
+            ct);
+
+        return new BcPagedList<BcCustomerFinancialDetailsDto>(
+            response?.Value ?? [],
+            response?.Count);
+    }
+
+    public async Task<IReadOnlyList<BcCustomerDto>> GetCustomersByNumbersAsync(
+        IReadOnlyCollection<string> numbers,
+        CancellationToken ct = default)
+    {
+        if (numbers.Count == 0)
+            return [];
+
+        var distinct = numbers.Distinct().ToList();
+        var filter = Uri.EscapeDataString(string.Join(" or ", distinct.Select(n => $"number eq '{n.Replace("'", "''")}'")));
+
+        var response = await GetAsync<BcListResponse<BcCustomerDto>>(
+            CompanyPath($"customers?$filter={filter}&$top={distinct.Count}"),
+            ct);
+
+        return response?.Value ?? [];
+    }
+
+    public async Task<BcAgedReceivablesRowDto?> GetAgedReceivablesTotalAsync(CancellationToken ct = default)
+    {
+        var response = await GetAsync<BcListResponse<BcAgedReceivablesRowDto>>(
+            CompanyPath("agedAccountsReceivables"),
+            ct);
+
+        return response?.Value.FirstOrDefault(r => r.CustomerId == Guid.Empty);
+    }
+
     public async Task<IReadOnlyList<BcSalesInvoiceLineDto>> GetSalesInvoiceLinesAsync(
         Guid invoiceId,
         CancellationToken ct = default)

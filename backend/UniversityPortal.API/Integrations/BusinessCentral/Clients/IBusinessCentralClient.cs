@@ -27,6 +27,20 @@ public interface IBusinessCentralClient
         string invoiceNumber,
         CancellationToken ct = default);
 
+    Task<BcPagedList<BcSalesInvoiceDto>> QuerySalesInvoicesAsync(
+        BcInvoiceQuery query,
+        CancellationToken ct = default);
+
+    Task<BcPagedList<BcCustomerFinancialDetailsDto>> QueryCustomerFinancialDetailsAsync(
+        BcBalanceQuery query,
+        CancellationToken ct = default);
+
+    Task<IReadOnlyList<BcCustomerDto>> GetCustomersByNumbersAsync(
+        IReadOnlyCollection<string> numbers,
+        CancellationToken ct = default);
+
+    Task<BcAgedReceivablesRowDto?> GetAgedReceivablesTotalAsync(CancellationToken ct = default);
+
     Task<IReadOnlyList<BcSalesInvoiceLineDto>> GetSalesInvoiceLinesAsync(
         Guid invoiceId,
         CancellationToken ct = default);
