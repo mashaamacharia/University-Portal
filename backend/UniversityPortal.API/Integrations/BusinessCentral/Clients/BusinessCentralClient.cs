@@ -44,6 +44,20 @@ public class BusinessCentralClient : IBusinessCentralClient
         return response?.Value ?? [];
     }
 
+    public async Task<BcCustomerDto?> GetCustomerByNumberAsync(
+        string customerNumber,
+        CancellationToken ct = default)
+    {
+        ValidateCustomerNumber(customerNumber);
+
+        var safeCustomerNumber = customerNumber.Replace("'", "''", StringComparison.Ordinal);
+        var filter = Uri.EscapeDataString($"number eq '{safeCustomerNumber}'");
+        var url = CompanyPath($"customers?$filter={filter}&$top=1");
+
+        var response = await GetAsync<BcListResponse<BcCustomerDto>>(url, ct);
+        return response?.Value.FirstOrDefault();
+    }
+
     public async Task<BcCustomerFinancialDetailsDto?> GetCustomerFinancialDetailsAsync(
         string customerNumber,
         CancellationToken ct = default)
@@ -77,6 +91,27 @@ public class BusinessCentralClient : IBusinessCentralClient
         return response?.Value
             .Where(invoice => PostedStatusSet.Contains(invoice.Status))
             .ToList() ?? [];
+    }
+
+    public async Task<BcSalesInvoiceDto?> GetPostedSalesInvoiceByNumberAsync(
+        string customerNumber,
+        string invoiceNumber,
+        CancellationToken ct = default)
+    {
+        ValidateCustomerNumber(customerNumber);
+        ValidateInvoiceNumber(invoiceNumber);
+
+        var safeCustomerNumber = customerNumber.Replace("'", "''", StringComparison.Ordinal);
+        var safeInvoiceNumber = invoiceNumber.Replace("'", "''", StringComparison.Ordinal);
+        var statusFilter = string.Join(" or ", PostedStatuses.Select(status => $"status eq '{status}'"));
+        var filter = Uri.EscapeDataString(
+            $"customerNumber eq '{safeCustomerNumber}' and number eq '{safeInvoiceNumber}' and ({statusFilter})");
+
+        var response = await GetAsync<BcListResponse<BcSalesInvoiceDto>>(
+            CompanyPath($"salesInvoices?$filter={filter}&$top=1"),
+            ct);
+
+        return response?.Value.FirstOrDefault();
     }
 
     public async Task<IReadOnlyList<BcSalesInvoiceLineDto>> GetSalesInvoiceLinesAsync(
@@ -153,6 +188,17 @@ public class BusinessCentralClient : IBusinessCentralClient
                 StatusCodes.Status400BadRequest,
                 "Invalid customer number",
                 "A customer number is required.");
+        }
+    }
+
+    private static void ValidateInvoiceNumber(string invoiceNumber)
+    {
+        if (string.IsNullOrWhiteSpace(invoiceNumber))
+        {
+            throw new PortalException(
+                StatusCodes.Status400BadRequest,
+                "Invalid invoice number",
+                "An invoice number is required.");
         }
     }
 
