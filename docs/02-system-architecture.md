@@ -77,6 +77,7 @@ flowchart TD
 - Convert Business Central responses into stable portal DTOs.
 - Handle pagination, timeouts and API errors.
 - Apply safe retry and duplicate-prevention strategies to write operations.
+- Validate Business Central settings at startup and use bounded timeouts, retries and a circuit breaker for outbound requests. Retries are disabled for unsafe HTTP methods.
 
 ### 4.3 Business Central
 

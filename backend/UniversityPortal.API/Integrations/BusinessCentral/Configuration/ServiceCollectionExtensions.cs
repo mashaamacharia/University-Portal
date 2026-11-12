@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 using UniversityPortal.API.Integrations.BusinessCentral.Clients;
 
@@ -9,27 +10,35 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        var section = configuration.GetSection(BusinessCentralOptions.SectionName);
+
         services.AddOptions<BusinessCentralOptions>()
-            .Bind(configuration.GetSection(BusinessCentralOptions.SectionName))
+            .Bind(section)
+            .ValidateDataAnnotations()
             .Validate(
-                options => Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out var uri)
-                    && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps),
-                "BusinessCentral:BaseUrl must be an absolute HTTP or HTTPS URL.")
+                options => options.CompanyId != Guid.Empty,
+                "BusinessCentral:CompanyId must be set to the id of the BC company.")
             .Validate(
-                options => options.TimeoutSeconds > 0,
-                "BusinessCentral:TimeoutSeconds must be greater than zero.")
-            .Validate(
-                options => string.Equals(options.AuthMode, "Windows", StringComparison.OrdinalIgnoreCase),
-                "BusinessCentral:AuthMode currently supports only Windows.")
+                options => options.AuthMode == "Windows",
+                "BusinessCentral:AuthMode must be 'Windows' (the only mode supported so far).")
             .ValidateOnStart();
 
-        services.AddHttpClient<IBusinessCentralClient, BusinessCentralClient>((serviceProvider, client) =>
+        var attemptTimeout = Math.Clamp(
+            section.Get<BusinessCentralOptions>()?.TimeoutSeconds ?? 30,
+            1,
+            120);
+        const int retries = 2;
+
+        services.AddTransient<BusinessCentralLoggingHandler>();
+
+        var http = services.AddHttpClient<IBusinessCentralClient, BusinessCentralClient>((serviceProvider, client) =>
         {
             var options = serviceProvider.GetRequiredService<IOptions<BusinessCentralOptions>>().Value;
             client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
-            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
-        })
-        .ConfigurePrimaryHttpMessageHandler(serviceProvider =>
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
+
+        http.ConfigurePrimaryHttpMessageHandler(serviceProvider =>
         {
             var options = serviceProvider.GetRequiredService<IOptions<BusinessCentralOptions>>().Value;
             return new HttpClientHandler
@@ -40,6 +49,19 @@ public static class ServiceCollectionExtensions
                     StringComparison.OrdinalIgnoreCase)
             };
         });
+
+        http.AddStandardResilienceHandler(options =>
+        {
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(attemptTimeout);
+            options.Retry.MaxRetryAttempts = retries;
+            options.Retry.DisableForUnsafeHttpMethods();
+            options.TotalRequestTimeout.Timeout =
+                TimeSpan.FromSeconds(attemptTimeout * (retries + 1) + 10);
+            options.CircuitBreaker.SamplingDuration =
+                TimeSpan.FromSeconds(attemptTimeout * 2 + 5);
+        });
+
+        http.AddHttpMessageHandler<BusinessCentralLoggingHandler>();
 
         return services;
     }

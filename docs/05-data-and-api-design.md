@@ -172,19 +172,21 @@ This is a proposed portal DTO, not a guarantee of the fields or statuses returne
 
 ## 7. Error Contract
 
-The portal API should return consistent, non-sensitive error responses.
+The API uses ASP.NET Core Problem Details responses for unhandled failures and known portal exceptions.
 
 Example:
 
 ```json
 {
-  "code": "BUSINESS_CENTRAL_UNAVAILABLE",
-  "message": "Financial information is temporarily unavailable.",
-  "correlationId": "example-correlation-id"
+  "type": "about:blank",
+  "title": "Business Central unavailable",
+  "status": 502,
+  "detail": "The portal could not complete this request with Business Central. Try again, and contact support if it continues.",
+  "traceId": "00-example-trace-id"
 }
 ```
 
-Do not return access tokens, credentials, raw stack traces or sensitive internal details to the browser.
+Business Central errors are translated to safe portal messages and appropriate gateway status codes. The response includes a trace ID for support investigations; Business Central response details and exceptions are logged server-side. Do not return access tokens, credentials, raw stack traces or sensitive internal details to the browser.
 
 ## 8. Pagination and Consistency
 
