@@ -22,7 +22,7 @@ The initial implementation is a development project using fictitious records. Pr
 
 ### Portal Users
 
-Select an appropriate identity provider and authentication mechanism before implementation.
+Portal accounts are stored with ASP.NET Core Identity in PostgreSQL. Identity password policy and lockout settings are configured in the backend. The seed administrator password, when used, must be supplied through user-secrets or a deployment secret store and removed after the administrator is created.
 
 The design must establish:
 

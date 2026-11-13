@@ -20,6 +20,8 @@ The architecture separates presentation, application coordination and ERP accoun
 
 - C#
 - ASP.NET Core Web API
+- ASP.NET Core Identity
+- PostgreSQL with Entity Framework Core
 - Built-in dependency injection
 - Swagger/OpenAPI
 - HttpClient for outbound Business Central requests
@@ -105,11 +107,20 @@ business-central/
 
 The backend can consume this custom API when standard Business Central APIs do not expose the required ledger-entry data. A custom AL extension must use appropriate permissions and Business Central business logic. It must not bypass posting controls.
 
-### 4.5 Optional Portal Database
+### 4.5 Portal Database
 
-A separate database may later store portal-specific information such as identity mappings or workflow metadata.
+PostgreSQL stores portal identity data, including user accounts, roles, student-number mappings and account status. It is not the source of truth for accounting balances or ledger entries; those remain in Business Central.
 
-It must not become an independent source of truth for posted accounting balances.
+The schema is managed with Entity Framework Core migrations. Configure `ConnectionStrings:PortalDb` using user-secrets for local development or a managed secret store for deployed environments, then apply migrations before starting the API. The API seeds the Student, FinanceOfficer and Administrator roles at startup. A seed administrator is created only when `Seed:AdminEmail` and `Seed:AdminPassword` are configured and no administrator exists.
+
+For local development, set the connection string and apply the schema from the API project directory:
+
+```powershell
+dotnet user-secrets set "ConnectionStrings:PortalDb" "<postgres-connection-string>"
+dotnet ef database update
+```
+
+The optional seed administrator can be configured with `dotnet user-secrets set "Seed:AdminEmail" "<admin-email>"` and `dotnet user-secrets set "Seed:AdminPassword" "<strong-password>"`.
 
 ## 5. Request Lifecycle
 
@@ -141,6 +152,7 @@ The backend will not connect directly to Business Central's SQL database.
 
 - Local frontend and ASP.NET Core API.
 - Local Business Central development company.
+- PostgreSQL database with the API migrations applied.
 - Fictitious records and test transactions.
 
 ### Testing
@@ -162,8 +174,8 @@ The backend will not connect directly to Business Central's SQL database.
 - Use AL for Business Central-specific extensions.
 - Use Next.js to reuse existing frontend skills.
 - Keep financial accounting in Business Central.
+- Use PostgreSQL and ASP.NET Core Identity for portal accounts and role assignments.
 - Prefer existing APIs before building custom endpoints.
-- Avoid adding a separate database until there is a defined requirement.
 - Keep the first release small and expand incrementally.
 
 ## 9. Items to Verify

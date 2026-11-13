@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using UniversityPortal.API.Infrastructure.Persistence;
 
 namespace UniversityPortal.API.Common.Health;
 
@@ -6,13 +7,25 @@ namespace UniversityPortal.API.Common.Health;
 [Route("api/health")]
 public class HealthController : ControllerBase
 {
-    [HttpGet]
-    public IActionResult Get()
+    private readonly PortalDbContext _db;
+
+    public HealthController(PortalDbContext db)
     {
-        return Ok(new
+        _db = db;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Get(CancellationToken ct)
+    {
+        var databaseUp = await _db.Database.CanConnectAsync(ct);
+
+        var body = new
         {
-            status = "Healthy",
+            status = databaseUp ? "Healthy" : "Degraded",
+            database = databaseUp ? "Up" : "Down",
             timestampUtc = DateTime.UtcNow
-        });
+        };
+
+        return databaseUp ? Ok(body) : StatusCode(StatusCodes.Status503ServiceUnavailable, body);
     }
 }
