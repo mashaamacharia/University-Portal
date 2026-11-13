@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
+using UniversityPortal.API.Common.Responses;
 using UniversityPortal.API.Modules.Finance.DTOs;
 using UniversityPortal.API.Modules.Finance.Services;
 
@@ -35,4 +36,10 @@ public class StudentFinanceController : ControllerBase
     [HttpGet("invoices/{invoiceNumber}")]
     public async Task<ActionResult<InvoiceDetailDto>> GetInvoice(string invoiceNumber, CancellationToken ct) =>
         Ok(await _finance.GetInvoiceAsync(invoiceNumber, ct));
+
+    [HttpGet("payments")]
+    public async Task<ActionResult<PagedResult<PaymentHistoryEntryDto>>> GetPayments(
+        [FromQuery] PaymentHistoryQuery query,
+        CancellationToken ct) =>
+        Ok(await _finance.GetPaymentHistoryAsync(query, ct));
 }

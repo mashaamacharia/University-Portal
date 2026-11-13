@@ -1,12 +1,16 @@
 using UniversityPortal.API.Common.Exceptions;
+using UniversityPortal.API.Common.Responses;
 using UniversityPortal.API.Common.Security;
 using UniversityPortal.API.Integrations.BusinessCentral.Clients;
+using UniversityPortal.API.Integrations.BusinessCentral.DTOs;
 using UniversityPortal.API.Modules.Finance.DTOs;
 
 namespace UniversityPortal.API.Modules.Finance.Services;
 
 public class StudentFinanceService : IStudentFinanceService
 {
+    private static readonly string[] PaymentTypes = { "Payment" };
+
     private readonly IBusinessCentralClient _bc;
     private readonly ICurrentUser _user;
     private readonly TimeProvider _time;
@@ -30,7 +34,10 @@ public class StudentFinanceService : IStudentFinanceService
         var customerTask = _bc.GetCustomerByNumberAsync(number, ct);
         var detailsTask = _bc.GetCustomerFinancialDetailsAsync(number, ct);
         var invoicesTask = _bc.GetPostedSalesInvoicesAsync(number, top, ct);
-        await Task.WhenAll(customerTask, detailsTask, invoicesTask);
+        var paymentsTask = _bc.QueryCustomerLedgerEntriesAsync(
+            new BcLedgerEntryQuery(number, PaymentTypes, null, null, 0, 10),
+            ct);
+        await Task.WhenAll(customerTask, detailsTask, invoicesTask, paymentsTask);
 
         var customer = await customerTask
             ?? throw new NotFoundException($"No BC customer for student {number}");
@@ -44,6 +51,9 @@ public class StudentFinanceService : IStudentFinanceService
                 details?.Balance ?? 0,
                 details?.OverdueAmount ?? 0),
             Invoices: (await invoicesTask).Select(i => FinanceMapper.ToSummary(i, today)).ToList(),
+            RecentPayments: (await paymentsTask).Items
+                .Select(payment => FinanceMapper.ToPayment(payment, customer.CurrencyCode))
+                .ToList(),
             GeneratedAtUtc: _time.GetUtcNow().UtcDateTime);
     }
 
@@ -90,5 +100,32 @@ public class StudentFinanceService : IStudentFinanceService
                 .Select(FinanceMapper.ToLine)
                 .OfType<InvoiceLineDto>()
                 .ToList());
+    }
+
+    public async Task<PagedResult<PaymentHistoryEntryDto>> GetPaymentHistoryAsync(
+        PaymentHistoryQuery query,
+        CancellationToken ct)
+    {
+        var number = RequireStudentNumber();
+        var skip = (query.Page - 1) * query.PageSize;
+
+        var customerTask = _bc.GetCustomerByNumberAsync(number, ct);
+        var paymentsTask = _bc.QueryCustomerLedgerEntriesAsync(
+            new BcLedgerEntryQuery(number, PaymentTypes, query.From, query.To, skip, query.PageSize),
+            ct);
+        await Task.WhenAll(customerTask, paymentsTask);
+
+        var customer = await customerTask
+            ?? throw new NotFoundException($"No BC customer for student {number}");
+        var page = await paymentsTask;
+
+        var items = page.Items
+            .Select(payment => FinanceMapper.ToPayment(payment, customer.CurrencyCode))
+            .ToList();
+        return new PagedResult<PaymentHistoryEntryDto>(
+            items,
+            query.Page,
+            query.PageSize,
+            page.TotalCount ?? skip + items.Count);
     }
 }

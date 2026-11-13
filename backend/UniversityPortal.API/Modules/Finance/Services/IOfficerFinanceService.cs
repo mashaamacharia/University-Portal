@@ -10,4 +10,7 @@ public interface IOfficerFinanceService
     Task<PagedResult<OutstandingBalanceDto>> GetOutstandingBalancesAsync(
         OutstandingBalanceQuery query,
         CancellationToken ct);
+    Task<PagedResult<OfficerPaymentDto>> GetPaymentsAsync(
+        OfficerPaymentQuery query,
+        CancellationToken ct);
 }

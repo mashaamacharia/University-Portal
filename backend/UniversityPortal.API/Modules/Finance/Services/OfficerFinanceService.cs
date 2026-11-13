@@ -10,6 +10,8 @@ namespace UniversityPortal.API.Modules.Finance.Services;
 
 public class OfficerFinanceService : IOfficerFinanceService
 {
+    private static readonly string[] PaymentTypes = { "Payment" };
+
     private readonly IBusinessCentralClient _bc;
     private readonly ICurrentUser _user;
     private readonly TimeProvider _time;
@@ -116,6 +118,49 @@ public class OfficerFinanceService : IOfficerFinanceService
         }).ToList();
 
         return new PagedResult<OutstandingBalanceDto>(
+            items,
+            query.Page,
+            query.PageSize,
+            page.TotalCount ?? skip + items.Count);
+    }
+
+    public async Task<PagedResult<OfficerPaymentDto>> GetPaymentsAsync(
+        OfficerPaymentQuery query,
+        CancellationToken ct)
+    {
+        RequireOfficer();
+
+        var skip = (query.Page - 1) * query.PageSize;
+        var page = await _bc.QueryCustomerLedgerEntriesAsync(
+            new BcLedgerEntryQuery(
+                query.CustomerNumber,
+                PaymentTypes,
+                query.From,
+                query.To,
+                skip,
+                query.PageSize),
+            ct);
+
+        var customers = await _bc.GetCustomersByNumbersAsync(
+            page.Items.Select(payment => payment.CustomerNumber).Distinct().ToList(),
+            ct);
+        var byNumber = customers.ToDictionary(customer => customer.Number, StringComparer.Ordinal);
+
+        var items = page.Items.Select(payment =>
+        {
+            byNumber.TryGetValue(payment.CustomerNumber, out var customer);
+            var historyEntry = FinanceMapper.ToPayment(payment, customer?.CurrencyCode ?? string.Empty);
+            return new OfficerPaymentDto(
+                historyEntry.ReceiptNumber,
+                payment.CustomerNumber,
+                customer?.DisplayName ?? string.Empty,
+                historyEntry.PaymentDate,
+                historyEntry.Amount,
+                historyEntry.CurrencyCode,
+                historyEntry.Reversed);
+        }).ToList();
+
+        return new PagedResult<OfficerPaymentDto>(
             items,
             query.Page,
             query.PageSize,

@@ -18,6 +18,13 @@ internal static class FinanceMapper
         AmountRemaining: bc.RemainingAmount,
         PaymentStatus: ComputeStatus(bc.TotalAmountIncludingTax, bc.RemainingAmount, bc.DueDate, today));
 
+    public static PaymentHistoryEntryDto ToPayment(BcCustomerLedgerEntryDto bc, string fallbackCurrency) => new(
+        ReceiptNumber: bc.DocumentNumber,
+        PaymentDate: bc.PostingDate,
+        Amount: -bc.Amount,
+        CurrencyCode: string.IsNullOrEmpty(bc.CurrencyCode) ? fallbackCurrency : bc.CurrencyCode,
+        Reversed: bc.Reversed);
+
     public static PaymentStatus ComputeStatus(
         decimal total,
         decimal remaining,

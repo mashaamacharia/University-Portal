@@ -26,6 +26,9 @@ public class BusinessCentralClient : IBusinessCentralClient
 
     private string CompanyPath(string resource) => $"companies({_options.CompanyId})/{resource}";
 
+    private string CustomApiCompanyPath(string resource) =>
+        $"../techworks/universityPortal/v1.0/companies({_options.CompanyId})/{resource}";
+
     public async Task<IReadOnlyList<BcCompanyDto>> GetCompaniesAsync(CancellationToken ct = default)
     {
         var response = await GetAsync<BcListResponse<BcCompanyDto>>("companies", ct);
@@ -182,6 +185,49 @@ public class BusinessCentralClient : IBusinessCentralClient
             ct);
 
         return new BcPagedList<BcCustomerFinancialDetailsDto>(
+            response?.Value ?? [],
+            response?.Count);
+    }
+
+    public async Task<BcPagedList<BcCustomerLedgerEntryDto>> QueryCustomerLedgerEntriesAsync(
+        BcLedgerEntryQuery q,
+        CancellationToken ct = default)
+    {
+        ValidatePage(q.Top, q.Skip);
+
+        var clauses = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(q.CustomerNumber))
+            clauses.Add($"customerNumber eq '{q.CustomerNumber.Replace("'", "''", StringComparison.Ordinal)}'");
+
+        if (q.DocumentTypes is { Count: > 0 })
+        {
+            var documentTypeGroup = "(" + string.Join(" or ", q.DocumentTypes
+                .Select(type => $"documentType eq '{type.Replace("'", "''", StringComparison.Ordinal)}'")) + ")";
+            clauses.Add(documentTypeGroup);
+        }
+
+        if (q.From is { } from)
+            clauses.Add($"postingDate ge {from:yyyy-MM-dd}");
+
+        if (q.To is { } to)
+            clauses.Add($"postingDate le {to:yyyy-MM-dd}");
+
+        var parts = new List<string>
+        {
+            "$count=true",
+            $"$top={q.Top}",
+            $"$skip={q.Skip}",
+            "$orderby=" + Uri.EscapeDataString("postingDate desc,entryNumber desc")
+        };
+        if (clauses.Count > 0)
+            parts.Add("$filter=" + Uri.EscapeDataString(string.Join(" and ", clauses)));
+
+        var response = await GetAsync<BcListResponse<BcCustomerLedgerEntryDto>>(
+            CustomApiCompanyPath("customerLedgerEntries?" + string.Join("&", parts)),
+            ct);
+
+        return new BcPagedList<BcCustomerLedgerEntryDto>(
             response?.Value ?? [],
             response?.Count);
     }
