@@ -31,4 +31,10 @@ public class OfficerFinanceController : ControllerBase
         [FromQuery] OutstandingBalanceQuery query,
         CancellationToken ct) =>
         Ok(await _finance.GetOutstandingBalancesAsync(query, ct));
+
+    [HttpGet("payments")]
+    public async Task<ActionResult<PagedResult<OfficerPaymentDto>>> GetPayments(
+        [FromQuery] OfficerPaymentQuery query,
+        CancellationToken ct) =>
+        Ok(await _finance.GetPaymentsAsync(query, ct));
 }

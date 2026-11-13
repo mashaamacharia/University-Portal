@@ -79,6 +79,36 @@ public record FeeStatementDto(
     IReadOnlyList<PaymentHistoryEntryDto> RecentPayments,
     DateTime GeneratedAtUtc);
 
+public record OfficerPaymentDto(
+    string ReceiptNumber,
+    string StudentNumber,
+    string StudentName,
+    DateOnly PaymentDate,
+    decimal Amount,
+    string CurrencyCode,
+    bool Reversed);
+
+public class OfficerPaymentQuery : IValidatableObject
+{
+    [StringLength(20)]
+    public string? CustomerNumber { get; set; }
+
+    public DateOnly? From { get; set; }
+    public DateOnly? To { get; set; }
+
+    [Range(1, 10000)]
+    public int Page { get; set; } = 1;
+
+    [Range(1, 50)]
+    public int PageSize { get; set; } = 25;
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext context)
+    {
+        if (From is { } from && To is { } to && from > to)
+            yield return new ValidationResult("'From' must not be after 'To'.", new[] { nameof(From), nameof(To) });
+    }
+}
+
 public record AgingBucketDto(string Label, decimal Amount);
 
 public record OfficerDashboardDto(

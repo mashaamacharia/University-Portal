@@ -193,13 +193,12 @@ public class BusinessCentralClient : IBusinessCentralClient
         BcLedgerEntryQuery q,
         CancellationToken ct = default)
     {
-        ValidateCustomerNumber(q.CustomerNumber);
         ValidatePage(q.Top, q.Skip);
 
-        var clauses = new List<string>
-        {
-            $"customerNumber eq '{q.CustomerNumber.Replace("'", "''", StringComparison.Ordinal)}'"
-        };
+        var clauses = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(q.CustomerNumber))
+            clauses.Add($"customerNumber eq '{q.CustomerNumber.Replace("'", "''", StringComparison.Ordinal)}'");
 
         if (q.DocumentTypes is { Count: > 0 })
         {
@@ -219,9 +218,10 @@ public class BusinessCentralClient : IBusinessCentralClient
             "$count=true",
             $"$top={q.Top}",
             $"$skip={q.Skip}",
-            "$orderby=" + Uri.EscapeDataString("postingDate desc,entryNumber desc"),
-            "$filter=" + Uri.EscapeDataString(string.Join(" and ", clauses))
+            "$orderby=" + Uri.EscapeDataString("postingDate desc,entryNumber desc")
         };
+        if (clauses.Count > 0)
+            parts.Add("$filter=" + Uri.EscapeDataString(string.Join(" and ", clauses)));
 
         var response = await GetAsync<BcListResponse<BcCustomerLedgerEntryDto>>(
             CustomApiCompanyPath("customerLedgerEntries?" + string.Join("&", parts)),

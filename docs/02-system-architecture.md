@@ -76,6 +76,7 @@ flowchart TD
 - Call Business Central using supported authentication.
 - Convert Business Central responses into stable portal DTOs.
 - Provide student payment history using customer ledger entries, converting Business Central's negative payment amounts to positive student-facing amounts and flagging reversed entries.
+- Provide finance officers with paged payment records across students, including the student name and currency resolved from the customer record.
 - Handle pagination, timeouts and API errors.
 - Apply safe retry and duplicate-prevention strategies to write operations.
 - Validate Business Central settings at startup and use bounded timeouts, retries and a circuit breaker for outbound requests. Retries are disabled for unsafe HTTP methods.
