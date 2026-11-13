@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using UniversityPortal.API.Infrastructure.Persistence;
 
@@ -5,6 +6,7 @@ namespace UniversityPortal.API.Common.Health;
 
 [ApiController]
 [Route("api/health")]
+[AllowAnonymous]
 public class HealthController : ControllerBase
 {
     private readonly PortalDbContext _db;

@@ -21,6 +21,7 @@ The architecture separates presentation, application coordination and ERP accoun
 - C#
 - ASP.NET Core Web API
 - ASP.NET Core Identity
+- JWT bearer authentication and role-based authorization
 - PostgreSQL with Entity Framework Core
 - Built-in dependency injection
 - Swagger/OpenAPI
@@ -113,10 +114,13 @@ PostgreSQL stores portal identity data, including user accounts, roles, student-
 
 The schema is managed with Entity Framework Core migrations. Configure `ConnectionStrings:PortalDb` using user-secrets for local development or a managed secret store for deployed environments, then apply migrations before starting the API. The API seeds the Student, FinanceOfficer and Administrator roles at startup. A seed administrator is created only when `Seed:AdminEmail` and `Seed:AdminPassword` are configured and no administrator exists.
 
+Portal users sign in through `POST /api/auth/login`. The API returns a short-lived JWT containing the user's ID, email, name, roles and optional student number. `GET /api/auth/me` returns the authenticated user's token-backed profile. Student and finance-officer finance controllers require their respective roles; other endpoints require authentication by default, except those explicitly marked anonymous such as health and login.
+
 For local development, set the connection string and apply the schema from the API project directory:
 
 ```powershell
 dotnet user-secrets set "ConnectionStrings:PortalDb" "<postgres-connection-string>"
+dotnet user-secrets set "Jwt:SigningKey" "<random-secret-at-least-32-bytes>"
 dotnet ef database update
 ```
 

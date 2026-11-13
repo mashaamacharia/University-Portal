@@ -22,7 +22,7 @@ The initial implementation is a development project using fictitious records. Pr
 
 ### Portal Users
 
-Portal accounts are stored with ASP.NET Core Identity in PostgreSQL. Identity password policy and lockout settings are configured in the backend. The seed administrator password, when used, must be supplied through user-secrets or a deployment secret store and removed after the administrator is created.
+Portal accounts are stored with ASP.NET Core Identity in PostgreSQL. Identity password policy and lockout settings are configured in the backend. Users sign in through the API and receive a short-lived JWT; protected endpoints validate its issuer, audience, signature and lifetime. Student and finance-officer endpoints additionally enforce their respective role. The seed administrator password, when used, must be supplied through user-secrets or a deployment secret store and removed after the administrator is created.
 
 The design must establish:
 
@@ -31,6 +31,8 @@ The design must establish:
 - How users are disabled or access revoked.
 - How roles are assigned and maintained.
 - How authentication errors are handled.
+
+The JWT signing key must be at least 32 UTF-8 bytes and must be kept in user-secrets locally or a managed secret store in deployed environments. It must not be committed to appsettings files or source control. Inactive portal accounts are rejected at login; existing tokens remain valid until expiry unless token revocation is added.
 
 ### Business Central Integration
 

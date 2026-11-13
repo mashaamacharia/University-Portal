@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using UniversityPortal.API.Common.Constants;
 using UniversityPortal.API.Common.Responses;
 using UniversityPortal.API.Modules.Finance.DTOs;
 using UniversityPortal.API.Modules.Finance.Services;
@@ -7,6 +9,7 @@ namespace UniversityPortal.API.Modules.Finance.Controllers;
 
 [ApiController]
 [Route("api/officer/finance")]
+[Authorize(Roles = Roles.FinanceOfficer)]
 public class OfficerFinanceController : ControllerBase
 {
     private readonly IOfficerFinanceService _finance;
