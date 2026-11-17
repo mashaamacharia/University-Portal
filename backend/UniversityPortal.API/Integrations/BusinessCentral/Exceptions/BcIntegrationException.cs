@@ -20,6 +20,10 @@ public class BcIntegrationException : PortalException
 
     public HttpStatusCode? BcStatusCode { get; }
 
+    public bool OutcomeUnknown => Kind is
+        BcFailureKind.Unreachable or BcFailureKind.Timeout or
+        BcFailureKind.ServerError or BcFailureKind.InvalidResponse;
+
     public BcIntegrationException(
         BcFailureKind kind,
         string logMessage,

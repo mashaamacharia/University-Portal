@@ -1,3 +1,5 @@
+using UniversityPortal.API.Integrations.BusinessCentral;
+
 namespace UniversityPortal.API.Integrations.BusinessCentral.DTOs;
 
 public class BcCustomerDto
@@ -25,5 +27,5 @@ public class BcCustomerDto
     public DateTime LastModifiedDateTime { get; set; }
 
     public bool IsBlocked =>
-        !string.IsNullOrWhiteSpace(Blocked) && Blocked != "_x0020_";
+        !string.IsNullOrWhiteSpace(BcValue.Decode(Blocked));
 }

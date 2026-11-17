@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using UniversityPortal.API.Common.Auditing;
 
 namespace UniversityPortal.API.Infrastructure.Persistence;
 
@@ -13,6 +14,7 @@ public static class PersistenceExtensions
                 "ConnectionStrings:PortalDb is not configured. Set it with 'dotnet user-secrets'.");
 
         services.AddDbContext<PortalDbContext>(options => options.UseNpgsql(connectionString));
+        services.AddScoped<IAuditLog, AuditLog>();
         return services;
     }
 }

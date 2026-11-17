@@ -128,6 +128,8 @@ Where appropriate, include:
 
 Do not log access tokens, passwords or unnecessary personal and financial information.
 
+Audit records are append-only application history. Production database permissions must prevent the application role from updating or deleting audit rows. Do not include passwords, tokens or unnecessary personal/financial data in audit details.
+
 Business Central request logs include the HTTP method, URL path, status and elapsed time, but omit the query string because filters may contain customer identifiers. Business Central failure details are retained only in server logs; access to those logs must be restricted and managed according to the data-retention policy.
 
 ## 9. Data Protection

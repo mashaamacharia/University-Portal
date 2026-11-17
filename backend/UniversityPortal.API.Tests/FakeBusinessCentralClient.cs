@@ -113,6 +113,27 @@ public class FakeBusinessCentralClient : IBusinessCentralClient
             PostedStatuses.Contains(invoice.Status)));
     }
 
+    public Task<BcSalesInvoiceDto> CreateDraftSalesInvoiceAsync(
+        BcCreateInvoiceRequest request,
+        CancellationToken ct = default) =>
+        throw new NotImplementedException();
+
+    public Task PostSalesInvoiceAsync(Guid invoiceId, CancellationToken ct = default) =>
+        throw new NotImplementedException();
+
+    public Task DeleteDraftSalesInvoiceAsync(Guid invoiceId, CancellationToken ct = default) =>
+        throw new NotImplementedException();
+
+    public Task<BcSalesInvoiceDto?> GetSalesInvoiceByIdAsync(
+        Guid invoiceId,
+        CancellationToken ct = default) =>
+        throw new NotImplementedException();
+
+    public Task<IReadOnlyList<BcSalesInvoiceDto>> FindSalesInvoicesByExternalDocumentNumberAsync(
+        string key,
+        CancellationToken ct = default) =>
+        throw new NotImplementedException();
+
     public Task<IReadOnlyList<BcSalesInvoiceLineDto>> GetSalesInvoiceLinesAsync(
         Guid invoiceId,
         CancellationToken ct = default) =>
