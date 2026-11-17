@@ -29,7 +29,8 @@ public static class AdministrationModuleExtensions
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
             })
             .AddRoles<IdentityRole<Guid>>()
-            .AddEntityFrameworkStores<PortalDbContext>();
+            .AddEntityFrameworkStores<PortalDbContext>()
+            .AddDefaultTokenProviders();
 
         services.AddOptions<JwtOptions>()
             .Bind(configuration.GetSection("Jwt"))
@@ -68,6 +69,7 @@ public static class AdministrationModuleExtensions
 
         services.AddSingleton<ITokenService, TokenService>();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IUserAdminService, UserAdminService>();
 
         return services;
     }

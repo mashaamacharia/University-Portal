@@ -116,6 +116,8 @@ The schema is managed with Entity Framework Core migrations. Configure `Connecti
 
 Portal users sign in through `POST /api/auth/login`. The API returns a short-lived JWT containing the user's ID, email, name, roles and optional student number. `GET /api/auth/me` returns the authenticated user's token-backed profile. Student and finance-officer finance controllers require their respective roles; other endpoints require authentication by default, except those explicitly marked anonymous such as health and login.
 
+Administrators manage portal accounts through `api/admin/users`: create accounts, search and page through users, view a user's profile, activate or disable accounts, and reset passwords. Student accounts are linked to an existing Business Central customer number. Signed-in users can change their own password through `POST /api/auth/change-password`. Initial passwords are communicated by an administrator; invitation and email-based password recovery are not implemented until an email service is available.
+
 For local development, set the connection string and apply the schema from the API project directory:
 
 ```powershell
@@ -164,6 +166,7 @@ The backend will not connect directly to Business Central's SQL database.
 - Repeatable test data and documented scenarios.
 - Automated tests for application services.
 - Integration tests against an appropriate development environment.
+- Run the API integration tests from `backend/UniversityPortal.API.Tests` with `PORTAL_TEST_DB` set to a PostgreSQL server connection string whose user can create and drop databases. The tests create uniquely named temporary databases and remove them when finished.
 
 ### Production (future)
 

@@ -11,6 +11,15 @@ public class LoginRequest
     public string Password { get; set; } = string.Empty;
 }
 
+public class ChangePasswordRequest
+{
+    [Required, StringLength(128)]
+    public string CurrentPassword { get; set; } = string.Empty;
+
+    [Required, StringLength(128)]
+    public string NewPassword { get; set; } = string.Empty;
+}
+
 public record CurrentUserDto(
     Guid UserId,
     string FullName,

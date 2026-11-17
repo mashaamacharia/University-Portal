@@ -8,6 +8,7 @@ namespace UniversityPortal.API.Modules.Administration.Services;
 public interface IAuthService
 {
     Task<LoginResponse> LoginAsync(LoginRequest request);
+    Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request);
 }
 
 public class AuthService(
@@ -50,6 +51,23 @@ public class AuthService(
             "Bearer",
             token.ExpiresAtUtc,
             new CurrentUserDto(user.Id, user.FullName, user.Email ?? string.Empty, roles, user.StudentNumber));
+    }
+
+    public async Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request)
+    {
+        var user = await users.FindByIdAsync(userId.ToString())
+            ?? throw new PortalException(401, "Sign-in failed", "Invalid email or password.");
+
+        var result = await users.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+        if (!result.Succeeded)
+        {
+            throw new PortalException(
+                400,
+                "Could not change the password",
+                string.Join(" ", result.Errors.Select(error => error.Description)));
+        }
+
+        logger.LogInformation("Account {UserId} changed its password", userId);
     }
 
     private static PortalException InvalidCredentials() =>

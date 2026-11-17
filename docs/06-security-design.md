@@ -34,6 +34,8 @@ The design must establish:
 
 The JWT signing key must be at least 32 UTF-8 bytes and must be kept in user-secrets locally or a managed secret store in deployed environments. It must not be committed to appsettings files or source control. Inactive portal accounts are rejected at login; existing tokens remain valid until expiry unless token revocation is added.
 
+Administrators can create accounts, set initial passwords, disable or re-enable accounts, and reset passwords. Account creation only accepts the supported Student, FinanceOfficer and Administrator roles; student accounts must map to an existing Business Central customer. Administrators cannot disable their own account or the last active administrator. There is no email invitation or password recovery flow; administrators provide initial or reset passwords out of band. Signed-in users may change their own password after supplying their current password.
+
 ### Business Central Integration
 
 Use a supported Microsoft Entra ID authentication flow for the target BC environment.

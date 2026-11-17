@@ -30,4 +30,14 @@ public class AuthController(IAuthService auth) : ControllerBase
             User.FindAll(ClaimNames.Role).Select(claim => claim.Value).ToList(),
             User.FindFirstValue(ClaimNames.StudentNumber)));
     }
+
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword(ChangePasswordRequest request)
+    {
+        if (!Guid.TryParse(User.FindFirstValue(JwtRegisteredClaimNames.Sub), out var userId))
+            return Unauthorized();
+
+        await auth.ChangePasswordAsync(userId, request);
+        return NoContent();
+    }
 }
