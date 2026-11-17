@@ -85,6 +85,36 @@ internal static class FinanceMapper
                 : null);
     }
 
+    public static OfficerInvoiceDetailDto ToOfficerDetail(
+        BcSalesInvoiceDto bc,
+        IReadOnlyList<BcSalesInvoiceLineDto> lines,
+        DateOnly today)
+    {
+        var status = ParseStatus(bc.Status);
+        var posted = status is InvoiceStatus.Open or InvoiceStatus.Paid or InvoiceStatus.Corrective;
+
+        return new OfficerInvoiceDetailDto(
+            BcInvoiceId: bc.Id,
+            InvoiceNumber: bc.Number,
+            ExternalDocumentNumber: string.IsNullOrEmpty(bc.ExternalDocumentNumber)
+                ? null
+                : bc.ExternalDocumentNumber,
+            StudentNumber: bc.CustomerNumber,
+            StudentName: bc.CustomerName,
+            Status: status,
+            InvoiceDate: bc.InvoiceDate,
+            DueDate: bc.DueDate,
+            CurrencyCode: bc.CurrencyCode,
+            TotalExcludingTax: bc.TotalAmountExcludingTax,
+            TaxAmount: bc.TotalTaxAmount,
+            TotalAmount: bc.TotalAmountIncludingTax,
+            AmountRemaining: bc.RemainingAmount,
+            PaymentStatus: posted
+                ? ComputeStatus(bc.TotalAmountIncludingTax, bc.RemainingAmount, bc.DueDate, today)
+                : null,
+            Lines: lines.Select(ToLine).OfType<InvoiceLineDto>().ToList());
+    }
+
     public static InvoiceLineDto? ToLine(BcSalesInvoiceLineDto bc) =>
         bc.LineType.Equals("Comment", StringComparison.OrdinalIgnoreCase)
             ? null

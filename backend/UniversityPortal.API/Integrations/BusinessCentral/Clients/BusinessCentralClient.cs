@@ -63,6 +63,26 @@ public class BusinessCentralClient : IBusinessCentralClient
         return response?.Value.FirstOrDefault();
     }
 
+    public async Task<BcItemDto?> GetItemByNumberAsync(string number, CancellationToken ct = default)
+    {
+        ValidateCatalogNumber(number, "item");
+        var filter = Uri.EscapeDataString($"number eq '{number.Replace("'", "''", StringComparison.Ordinal)}'");
+        var response = await GetAsync<BcListResponse<BcItemDto>>(
+            CompanyPath($"items?$filter={filter}&$top=1"),
+            ct);
+        return response?.Value.FirstOrDefault();
+    }
+
+    public async Task<BcAccountDto?> GetAccountByNumberAsync(string number, CancellationToken ct = default)
+    {
+        ValidateCatalogNumber(number, "account");
+        var filter = Uri.EscapeDataString($"number eq '{number.Replace("'", "''", StringComparison.Ordinal)}'");
+        var response = await GetAsync<BcListResponse<BcAccountDto>>(
+            CompanyPath($"accounts?$filter={filter}&$top=1"),
+            ct);
+        return response?.Value.FirstOrDefault();
+    }
+
     public async Task<BcCustomerFinancialDetailsDto?> GetCustomerFinancialDetailsAsync(
         string customerNumber,
         CancellationToken ct = default)
@@ -494,6 +514,17 @@ public class BusinessCentralClient : IBusinessCentralClient
                 StatusCodes.Status400BadRequest,
                 "Invalid customer number",
                 "A customer number is required.");
+        }
+    }
+
+    private static void ValidateCatalogNumber(string number, string kind)
+    {
+        if (string.IsNullOrWhiteSpace(number))
+        {
+            throw new PortalException(
+                StatusCodes.Status400BadRequest,
+                $"Invalid {kind} number",
+                $"A {kind} number is required.");
         }
     }
 

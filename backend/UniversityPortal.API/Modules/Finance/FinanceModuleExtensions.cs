@@ -8,6 +8,7 @@ public static class FinanceModuleExtensions
     {
         services.AddScoped<IStudentFinanceService, StudentFinanceService>();
         services.AddScoped<IOfficerFinanceService, OfficerFinanceService>();
+        services.AddScoped<IInvoiceWorkflowService, InvoiceWorkflowService>();
         return services;
     }
 }
