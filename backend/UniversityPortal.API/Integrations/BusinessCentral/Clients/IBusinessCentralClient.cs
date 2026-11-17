@@ -27,6 +27,20 @@ public interface IBusinessCentralClient
         string invoiceNumber,
         CancellationToken ct = default);
 
+    Task<BcSalesInvoiceDto> CreateDraftSalesInvoiceAsync(
+        BcCreateInvoiceRequest request,
+        CancellationToken ct = default);
+
+    Task PostSalesInvoiceAsync(Guid invoiceId, CancellationToken ct = default);
+
+    Task DeleteDraftSalesInvoiceAsync(Guid invoiceId, CancellationToken ct = default);
+
+    Task<BcSalesInvoiceDto?> GetSalesInvoiceByIdAsync(Guid invoiceId, CancellationToken ct = default);
+
+    Task<IReadOnlyList<BcSalesInvoiceDto>> FindSalesInvoicesByExternalDocumentNumberAsync(
+        string key,
+        CancellationToken ct = default);
+
     Task<BcPagedList<BcSalesInvoiceDto>> QuerySalesInvoicesAsync(
         BcInvoiceQuery query,
         CancellationToken ct = default);

@@ -1,5 +1,7 @@
 using System.Net;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using UniversityPortal.API.Integrations.BusinessCentral.Configuration;
 using UniversityPortal.API.Integrations.BusinessCentral.DTOs;
@@ -115,6 +117,76 @@ public class BusinessCentralClient : IBusinessCentralClient
             ct);
 
         return response?.Value.FirstOrDefault();
+    }
+
+    public async Task<BcSalesInvoiceDto> CreateDraftSalesInvoiceAsync(
+        BcCreateInvoiceRequest request,
+        CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, CompanyPath("salesInvoices"))
+        {
+            Content = JsonContent.Create(request)
+        };
+
+        return await SendWriteAsync<BcSalesInvoiceDto>(message, ct)
+            ?? throw new BcIntegrationException(
+                BcFailureKind.InvalidResponse,
+                "BC returned an empty body for a created invoice");
+    }
+
+    public async Task PostSalesInvoiceAsync(Guid invoiceId, CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(
+            HttpMethod.Post,
+            CompanyPath($"salesInvoices({invoiceId})/Microsoft.NAV.post"))
+        {
+            Content = new StringContent(string.Empty, Encoding.UTF8, "application/json")
+        };
+
+        await SendWriteAsync<object>(message, ct);
+    }
+
+    public async Task DeleteDraftSalesInvoiceAsync(Guid invoiceId, CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(
+            HttpMethod.Delete,
+            CompanyPath($"salesInvoices({invoiceId})"));
+        message.Headers.TryAddWithoutValidation("If-Match", "*");
+        await SendWriteAsync<object>(message, ct);
+    }
+
+    public async Task<BcSalesInvoiceDto?> GetSalesInvoiceByIdAsync(
+        Guid invoiceId,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            return await GetAsync<BcSalesInvoiceDto>(CompanyPath($"salesInvoices({invoiceId})"), ct);
+        }
+        catch (BcIntegrationException ex) when (ex.Kind == BcFailureKind.NotFound)
+        {
+            return null;
+        }
+    }
+
+    public async Task<IReadOnlyList<BcSalesInvoiceDto>> FindSalesInvoicesByExternalDocumentNumberAsync(
+        string key,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            throw new PortalException(
+                StatusCodes.Status400BadRequest,
+                "Invalid external document number",
+                "An external document number is required.");
+        }
+
+        var filter = Uri.EscapeDataString(
+            $"externalDocumentNumber eq '{key.Replace("'", "''", StringComparison.Ordinal)}'");
+        var response = await GetAsync<BcListResponse<BcSalesInvoiceDto>>(
+            CompanyPath($"salesInvoices?$filter={filter}&$top=5"),
+            ct);
+        return response?.Value ?? [];
     }
 
     public async Task<BcPagedList<BcSalesInvoiceDto>> QuerySalesInvoicesAsync(
@@ -265,6 +337,96 @@ public class BusinessCentralClient : IBusinessCentralClient
         var url = CompanyPath($"salesInvoices({invoiceId})/salesInvoiceLines");
         var response = await GetAsync<BcListResponse<BcSalesInvoiceLineDto>>(url, ct);
         return response?.Value ?? [];
+    }
+
+    private async Task<T?> SendWriteAsync<T>(HttpRequestMessage message, CancellationToken ct)
+    {
+        var path = message.RequestUri?.ToString().Split('?')[0] ?? "(unknown)";
+
+        try
+        {
+            using var response = await _http.SendAsync(message, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var (code, text, correlationId) = ParseBcError(body);
+                var isBusinessError = code is not null &&
+                    (code.StartsWith("Application_", StringComparison.Ordinal) ||
+                     code.StartsWith("Internal_", StringComparison.Ordinal));
+
+                if (isBusinessError && (int)response.StatusCode < 500)
+                    throw new BcRejectedException(text, code, correlationId);
+
+                throw new BcIntegrationException(
+                    MapKind(response.StatusCode),
+                    $"BC returned {(int)response.StatusCode} for {message.Method} {path}. " +
+                    $"Code: {code}. Message: {text}",
+                    response.StatusCode);
+            }
+
+            if (string.IsNullOrWhiteSpace(body))
+                return default;
+
+            return JsonSerializer.Deserialize<T>(body, JsonSerializerOptions.Web);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new BcIntegrationException(
+                BcFailureKind.Unreachable,
+                $"Could not reach BC for {message.Method} {path}",
+                inner: ex);
+        }
+        catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new BcIntegrationException(
+                BcFailureKind.Timeout,
+                $"BC timed out for {message.Method} {path}",
+                inner: ex);
+        }
+        catch (TimeoutRejectedException ex)
+        {
+            throw new BcIntegrationException(
+                BcFailureKind.Timeout,
+                $"BC timed out (resilience pipeline) for {message.Method} {path}",
+                inner: ex);
+        }
+        catch (BrokenCircuitException ex)
+        {
+            throw new BcIntegrationException(
+                BcFailureKind.Unreachable,
+                $"BC circuit is open for {message.Method} {path}",
+                inner: ex);
+        }
+        catch (JsonException ex)
+        {
+            throw new BcIntegrationException(
+                BcFailureKind.InvalidResponse,
+                $"BC returned unreadable JSON for {message.Method} {path}",
+                inner: ex);
+        }
+    }
+
+    private static (string? Code, string Message, string? CorrelationId) ParseBcError(string body)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(body);
+            var error = document.RootElement.GetProperty("error");
+            var code = error.TryGetProperty("code", out var codeElement) ? codeElement.GetString() : null;
+            var message = error.TryGetProperty("message", out var messageElement)
+                ? messageElement.GetString() ?? string.Empty
+                : string.Empty;
+
+            var match = Regex.Match(message, @"\s*CorrelationId:\s*([0-9a-fA-F-]{36})\.?\s*$");
+            return match.Success
+                ? (code, message[..match.Index].Trim(), match.Groups[1].Value)
+                : (code, message.Trim(), null);
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            return (null, body.Length > 300 ? body[..300] : body, null);
+        }
     }
 
     private async Task<T?> GetAsync<T>(string url, CancellationToken ct)

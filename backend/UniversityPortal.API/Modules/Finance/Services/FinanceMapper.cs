@@ -1,5 +1,6 @@
 using UniversityPortal.API.Integrations.BusinessCentral.DTOs;
 using UniversityPortal.API.Integrations.BusinessCentral.Exceptions;
+using UniversityPortal.API.Integrations.BusinessCentral;
 using UniversityPortal.API.Modules.Finance.DTOs;
 
 namespace UniversityPortal.API.Modules.Finance.Services;
@@ -51,7 +52,7 @@ internal static class FinanceMapper
         _ => throw new ArgumentOutOfRangeException(nameof(status))
     };
 
-    public static InvoiceStatus ParseStatus(string bcStatus) => bcStatus switch
+    public static InvoiceStatus ParseStatus(string bcStatus) => BcValue.Decode(bcStatus) switch
     {
         "Draft" => InvoiceStatus.Draft,
         "In Review" => InvoiceStatus.InReview,
