@@ -74,6 +74,8 @@ Authorization must be enforced in ASP.NET Core and, where applicable, in Busines
 - Prevent students from creating or posting invoices.
 - Require explicit permissions for financial write operations.
 - Protect against duplicate requests.
+- Validate the invoice customer and each item/account against Business Central before creating a draft; reject blocked customers/items/accounts and accounts that do not allow direct posting.
+- Require an idempotency key and reconcile uncertain Business Central writes before allowing retries.
 - Verify the resulting Business Central document or ledger state.
 - Record the requesting user and relevant document identifiers.
 - Never claim that a transaction succeeded solely because an HTTP request returned successfully.

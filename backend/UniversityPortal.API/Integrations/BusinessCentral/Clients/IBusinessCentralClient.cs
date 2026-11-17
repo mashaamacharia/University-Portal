@@ -13,6 +13,10 @@ public interface IBusinessCentralClient
 
     Task<BcCustomerDto?> GetCustomerByNumberAsync(string customerNumber, CancellationToken ct = default);
 
+    Task<BcItemDto?> GetItemByNumberAsync(string number, CancellationToken ct = default);
+
+    Task<BcAccountDto?> GetAccountByNumberAsync(string number, CancellationToken ct = default);
+
     Task<BcCustomerFinancialDetailsDto?> GetCustomerFinancialDetailsAsync(
         string customerNumber,
         CancellationToken ct = default);

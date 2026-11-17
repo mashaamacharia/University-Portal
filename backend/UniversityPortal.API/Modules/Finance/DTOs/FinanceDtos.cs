@@ -20,6 +20,42 @@ public enum InvoiceStatus
     Canceled
 }
 
+public enum InvoiceLineType
+{
+    Item,
+    Account
+}
+
+public class CreateInvoiceLineRequest
+{
+    [Required]
+    [EnumDataType(typeof(InvoiceLineType))]
+    public InvoiceLineType? LineType { get; set; }
+
+    [Required, StringLength(20)]
+    public string Number { get; set; } = string.Empty;
+
+    [Range(typeof(decimal), "0.0001", "1000000")]
+    public decimal Quantity { get; set; }
+
+    [Range(typeof(decimal), "0", "1000000000")]
+    public decimal? UnitPrice { get; set; }
+
+    [StringLength(100)]
+    public string? Description { get; set; }
+}
+
+public class CreateInvoiceRequest
+{
+    [Required, StringLength(20)]
+    public string StudentNumber { get; set; } = string.Empty;
+
+    public DateOnly? InvoiceDate { get; set; }
+
+    [Required, MinLength(1), MaxLength(50)]
+    public List<CreateInvoiceLineRequest> Lines { get; set; } = [];
+}
+
 public record StudentInfoDto(string StudentNumber, string Name, string Email);
 
 public record BalanceSummaryDto(string CurrencyCode, decimal Balance, decimal OverdueAmount);
@@ -140,6 +176,23 @@ public record OfficerInvoiceDto(
     decimal AmountRemaining,
     InvoiceStatus Status,
     PaymentStatus? PaymentStatus);
+
+public record OfficerInvoiceDetailDto(
+    Guid BcInvoiceId,
+    string InvoiceNumber,
+    string? ExternalDocumentNumber,
+    string StudentNumber,
+    string StudentName,
+    InvoiceStatus Status,
+    DateOnly InvoiceDate,
+    DateOnly DueDate,
+    string CurrencyCode,
+    decimal TotalExcludingTax,
+    decimal TaxAmount,
+    decimal TotalAmount,
+    decimal AmountRemaining,
+    PaymentStatus? PaymentStatus,
+    IReadOnlyList<InvoiceLineDto> Lines);
 
 public class OfficerInvoiceQuery : IValidatableObject
 {

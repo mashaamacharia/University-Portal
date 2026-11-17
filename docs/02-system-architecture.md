@@ -80,7 +80,8 @@ flowchart TD
 - Convert Business Central responses into stable portal DTOs.
 - Provide student payment history using customer ledger entries, converting Business Central's negative payment amounts to positive student-facing amounts and flagging reversed entries.
 - Provide finance officers with paged payment records across students, including the student name and currency resolved from the customer record.
-- Create, post and discard Business Central invoice drafts through explicit write operations; ambiguous write outcomes are surfaced so callers can reconcile rather than blindly retry.
+- Create Business Central invoice drafts through `POST /api/officer/finance/invoices`; finance officers can review a draft by its Business Central ID. Creation validates the customer and each item/account against Business Central before writing.
+- Require an `Idempotency-Key` for invoice creation. Persist the request hash and state before calling Business Central, use the key as the external document number, and reconcile uncertain write outcomes by searching Business Central before any retry.
 - Handle pagination, timeouts and API errors.
 - Apply safe retry and duplicate-prevention strategies to write operations.
 - Validate Business Central settings at startup and use bounded timeouts, retries and a circuit breaker for outbound requests. Retries are disabled for unsafe HTTP methods.
@@ -116,6 +117,8 @@ PostgreSQL stores portal identity data, including user accounts, roles, student-
 The schema is managed with Entity Framework Core migrations. Configure `ConnectionStrings:PortalDb` using user-secrets for local development or a managed secret store for deployed environments, then apply migrations before starting the API. The API seeds the Student, FinanceOfficer and Administrator roles at startup. A seed administrator is created only when `Seed:AdminEmail` and `Seed:AdminPassword` are configured and no administrator exists.
 
 The portal database also stores invoice idempotency requests, including their payload hash, lifecycle status and Business Central invoice identifiers. Audit entries record actor, action, outcome, entity, trace and optional JSON details. Treat the audit table as append-only; in production grant the application database role only the required `SELECT` and `INSERT` access on that table, not `UPDATE` or `DELETE`.
+
+Invoice requests with a pending, unconfirmed Business Central outcome are checked by external document number before a retry. If no match is found, the workflow waits three minutes before permitting another attempt. Reusing a key with a different payload returns a conflict; duplicate Business Central matches require manual reconciliation.
 
 Portal users sign in through `POST /api/auth/login`. The API returns a short-lived JWT containing the user's ID, email, name, roles and optional student number. `GET /api/auth/me` returns the authenticated user's token-backed profile. Student and finance-officer finance controllers require their respective roles; other endpoints require authentication by default, except those explicitly marked anonymous such as health and login.
 

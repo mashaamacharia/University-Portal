@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using UniversityPortal.API.Integrations.BusinessCentral.Clients;
 using UniversityPortal.API.Integrations.BusinessCentral.DTOs;
+using UniversityPortal.API.Integrations.BusinessCentral.Exceptions;
 
 namespace UniversityPortal.API.Tests;
 
@@ -43,8 +44,16 @@ public class FakeBusinessCentralClient : IBusinessCentralClient
     ];
 
     private readonly ConcurrentQueue<string> _queried = new();
+    private readonly ConcurrentDictionary<Guid, BcSalesInvoiceDto> _createdInvoices = new();
+    private readonly ConcurrentDictionary<Guid, IReadOnlyList<BcSalesInvoiceLineDto>> _createdInvoiceLines = new();
 
     public IReadOnlyCollection<string> CustomerNumbersQueried => _queried.ToArray();
+
+    public int CreatedInvoiceCount => _createdInvoices.Count;
+
+    public bool SimulateUnknownOutcomeBeforeCreate { get; set; }
+
+    public bool SimulateUnknownOutcomeAfterCreate { get; set; }
 
     public void Reset() => _queried.Clear();
 
@@ -78,6 +87,16 @@ public class FakeBusinessCentralClient : IBusinessCentralClient
         Record(customerNumber);
         return Task.FromResult(_customers.FirstOrDefault(customer => customer.Number == customerNumber));
     }
+
+    public Task<BcItemDto?> GetItemByNumberAsync(string number, CancellationToken ct = default) =>
+        Task.FromResult<BcItemDto?>(number == "SER203"
+            ? new BcItemDto { Id = Guid.NewGuid(), Number = number, DisplayName = "Service", UnitPrice = 100 }
+            : null);
+
+    public Task<BcAccountDto?> GetAccountByNumberAsync(string number, CancellationToken ct = default) =>
+        Task.FromResult<BcAccountDto?>(number == "6710"
+            ? new BcAccountDto { Id = Guid.NewGuid(), Number = number, DisplayName = "Fees", DirectPosting = true }
+            : null);
 
     public Task<BcCustomerFinancialDetailsDto?> GetCustomerFinancialDetailsAsync(
         string customerNumber,
@@ -115,8 +134,62 @@ public class FakeBusinessCentralClient : IBusinessCentralClient
 
     public Task<BcSalesInvoiceDto> CreateDraftSalesInvoiceAsync(
         BcCreateInvoiceRequest request,
-        CancellationToken ct = default) =>
-        throw new NotImplementedException();
+        CancellationToken ct = default)
+    {
+        if (SimulateUnknownOutcomeBeforeCreate)
+        {
+            SimulateUnknownOutcomeBeforeCreate = false;
+            throw new BcIntegrationException(BcFailureKind.Timeout, "Simulated uncertain BC outcome");
+        }
+
+        var customer = _customers.FirstOrDefault(candidate => candidate.Number == request.CustomerNumber);
+        var invoiceId = Guid.NewGuid();
+        var invoiceLines = request.Lines.Select((line, index) =>
+        {
+            var price = line.UnitPrice ?? (line.LineType == "Item" ? 100m : 0m);
+            var net = line.Quantity * price;
+            return new BcSalesInvoiceLineDto
+            {
+                Id = Guid.NewGuid(),
+                DocumentId = invoiceId,
+                Sequence = (index + 1) * 10000,
+                LineType = line.LineType,
+                LineObjectNumber = line.Number,
+                Description = line.Description ?? line.Number,
+                Quantity = line.Quantity,
+                UnitPrice = price,
+                NetAmount = net,
+                NetAmountIncludingTax = net,
+                AmountIncludingTax = net
+            };
+        }).ToList();
+        var total = invoiceLines.Sum(line => line.NetAmount);
+        var invoice = new BcSalesInvoiceDto
+        {
+            Id = invoiceId,
+            Number = $"DRAFT-{Guid.NewGuid():N}"[..18],
+            ExternalDocumentNumber = request.ExternalDocumentNumber,
+            CustomerId = customer?.Id ?? Guid.Empty,
+            CustomerNumber = request.CustomerNumber,
+            CustomerName = customer?.DisplayName ?? request.CustomerNumber,
+            CurrencyCode = customer?.CurrencyCode ?? "KES",
+            InvoiceDate = request.InvoiceDate ?? new DateOnly(2026, 11, 17),
+            DueDate = (request.InvoiceDate ?? new DateOnly(2026, 11, 17)).AddDays(30),
+            TotalAmountExcludingTax = total,
+            TotalAmountIncludingTax = total,
+            RemainingAmount = total,
+            Status = "Draft"
+        };
+        _createdInvoices[invoiceId] = invoice;
+        _createdInvoiceLines[invoiceId] = invoiceLines;
+        if (SimulateUnknownOutcomeAfterCreate)
+        {
+            SimulateUnknownOutcomeAfterCreate = false;
+            throw new BcIntegrationException(BcFailureKind.Timeout, "Simulated uncertain BC outcome");
+        }
+
+        return Task.FromResult(invoice);
+    }
 
     public Task PostSalesInvoiceAsync(Guid invoiceId, CancellationToken ct = default) =>
         throw new NotImplementedException();
@@ -127,17 +200,28 @@ public class FakeBusinessCentralClient : IBusinessCentralClient
     public Task<BcSalesInvoiceDto?> GetSalesInvoiceByIdAsync(
         Guid invoiceId,
         CancellationToken ct = default) =>
-        throw new NotImplementedException();
+        Task.FromResult(_createdInvoices.TryGetValue(invoiceId, out var invoice)
+            ? invoice
+            : _invoices.FirstOrDefault(existing => existing.Id == invoiceId));
 
     public Task<IReadOnlyList<BcSalesInvoiceDto>> FindSalesInvoicesByExternalDocumentNumberAsync(
         string key,
-        CancellationToken ct = default) =>
-        throw new NotImplementedException();
+        CancellationToken ct = default)
+    {
+        IReadOnlyList<BcSalesInvoiceDto> matches = _invoices
+            .Concat(_createdInvoices.Values)
+            .Where(invoice => invoice.ExternalDocumentNumber == key)
+            .Take(5)
+            .ToList();
+        return Task.FromResult(matches);
+    }
 
     public Task<IReadOnlyList<BcSalesInvoiceLineDto>> GetSalesInvoiceLinesAsync(
         Guid invoiceId,
         CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<BcSalesInvoiceLineDto>>([]);
+        Task.FromResult(_createdInvoiceLines.TryGetValue(invoiceId, out var lines)
+            ? lines
+            : (IReadOnlyList<BcSalesInvoiceLineDto>)[]);
 
     public Task<BcPagedList<BcSalesInvoiceDto>> QuerySalesInvoicesAsync(
         BcInvoiceQuery query,
@@ -145,9 +229,15 @@ public class FakeBusinessCentralClient : IBusinessCentralClient
     {
         Record(query.CustomerNumber);
         var matches = _invoices
+            .Concat(_createdInvoices.Values)
             .Where(invoice => query.CustomerNumber is null || invoice.CustomerNumber == query.CustomerNumber)
+            .Where(invoice => query.Statuses is not { Count: > 0 } ||
+                query.Statuses.Contains(invoice.Status, StringComparer.OrdinalIgnoreCase))
+            .Where(invoice => query.From is null || invoice.InvoiceDate >= query.From)
+            .Where(invoice => query.To is null || invoice.InvoiceDate <= query.To)
             .ToList();
-        return Task.FromResult(new BcPagedList<BcSalesInvoiceDto>(matches, matches.Count));
+        var page = matches.Skip(query.Skip).Take(query.Top).ToList();
+        return Task.FromResult(new BcPagedList<BcSalesInvoiceDto>(page, matches.Count));
     }
 
     public Task<BcPagedList<BcCustomerLedgerEntryDto>> QueryCustomerLedgerEntriesAsync(
