@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using UniversityPortal.API.Common.Constants;
 using UniversityPortal.API.Common.Responses;
 using UniversityPortal.API.Modules.Finance.DTOs;
 using UniversityPortal.API.Modules.Finance.Services;
@@ -8,6 +10,7 @@ namespace UniversityPortal.API.Modules.Finance.Controllers;
 
 [ApiController]
 [Route("api/student/finance")]
+[Authorize(Roles = Roles.Student)]
 public class StudentFinanceController : ControllerBase
 {
     private readonly IStudentFinanceService _finance;

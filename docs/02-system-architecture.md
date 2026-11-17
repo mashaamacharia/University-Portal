@@ -20,6 +20,9 @@ The architecture separates presentation, application coordination and ERP accoun
 
 - C#
 - ASP.NET Core Web API
+- ASP.NET Core Identity
+- JWT bearer authentication and role-based authorization
+- PostgreSQL with Entity Framework Core
 - Built-in dependency injection
 - Swagger/OpenAPI
 - HttpClient for outbound Business Central requests
@@ -105,11 +108,25 @@ business-central/
 
 The backend can consume this custom API when standard Business Central APIs do not expose the required ledger-entry data. A custom AL extension must use appropriate permissions and Business Central business logic. It must not bypass posting controls.
 
-### 4.5 Optional Portal Database
+### 4.5 Portal Database
 
-A separate database may later store portal-specific information such as identity mappings or workflow metadata.
+PostgreSQL stores portal identity data, including user accounts, roles, student-number mappings and account status. It is not the source of truth for accounting balances or ledger entries; those remain in Business Central.
 
-It must not become an independent source of truth for posted accounting balances.
+The schema is managed with Entity Framework Core migrations. Configure `ConnectionStrings:PortalDb` using user-secrets for local development or a managed secret store for deployed environments, then apply migrations before starting the API. The API seeds the Student, FinanceOfficer and Administrator roles at startup. A seed administrator is created only when `Seed:AdminEmail` and `Seed:AdminPassword` are configured and no administrator exists.
+
+Portal users sign in through `POST /api/auth/login`. The API returns a short-lived JWT containing the user's ID, email, name, roles and optional student number. `GET /api/auth/me` returns the authenticated user's token-backed profile. Student and finance-officer finance controllers require their respective roles; other endpoints require authentication by default, except those explicitly marked anonymous such as health and login.
+
+Administrators manage portal accounts through `api/admin/users`: create accounts, search and page through users, view a user's profile, activate or disable accounts, and reset passwords. Student accounts are linked to an existing Business Central customer number. Signed-in users can change their own password through `POST /api/auth/change-password`. Initial passwords are communicated by an administrator; invitation and email-based password recovery are not implemented until an email service is available.
+
+For local development, set the connection string and apply the schema from the API project directory:
+
+```powershell
+dotnet user-secrets set "ConnectionStrings:PortalDb" "<postgres-connection-string>"
+dotnet user-secrets set "Jwt:SigningKey" "<random-secret-at-least-32-bytes>"
+dotnet ef database update
+```
+
+The optional seed administrator can be configured with `dotnet user-secrets set "Seed:AdminEmail" "<admin-email>"` and `dotnet user-secrets set "Seed:AdminPassword" "<strong-password>"`.
 
 ## 5. Request Lifecycle
 
@@ -141,6 +158,7 @@ The backend will not connect directly to Business Central's SQL database.
 
 - Local frontend and ASP.NET Core API.
 - Local Business Central development company.
+- PostgreSQL database with the API migrations applied.
 - Fictitious records and test transactions.
 
 ### Testing
@@ -148,6 +166,7 @@ The backend will not connect directly to Business Central's SQL database.
 - Repeatable test data and documented scenarios.
 - Automated tests for application services.
 - Integration tests against an appropriate development environment.
+- Run the API integration tests from `backend/UniversityPortal.API.Tests` with `PORTAL_TEST_DB` set to a PostgreSQL server connection string whose user can create and drop databases. The tests create uniquely named temporary databases and remove them when finished.
 
 ### Production (future)
 
@@ -162,8 +181,8 @@ The backend will not connect directly to Business Central's SQL database.
 - Use AL for Business Central-specific extensions.
 - Use Next.js to reuse existing frontend skills.
 - Keep financial accounting in Business Central.
+- Use PostgreSQL and ASP.NET Core Identity for portal accounts and role assignments.
 - Prefer existing APIs before building custom endpoints.
-- Avoid adding a separate database until there is a defined requirement.
 - Keep the first release small and expand incrementally.
 
 ## 9. Items to Verify
