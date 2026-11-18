@@ -16,6 +16,21 @@ The architecture separates presentation, application coordination and ERP accoun
 - React
 - Tailwind CSS (proposed)
 
+The Next.js project lives entirely under `frontend/`, with application routes and shared code under `frontend/src/`:
+
+```text
+frontend/
+├── package.json
+├── next.config.ts
+└── src/
+    ├── app/
+    ├── components/
+    ├── lib/
+    └── types/
+```
+
+Generated Business Central/API contract types belong in `src/types/`; do not maintain a second root-level `app/` or `types/` directory.
+
 ### Application Backend
 
 - C#
