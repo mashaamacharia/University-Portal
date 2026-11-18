@@ -1,208 +1,93 @@
-1. BC integration additions
+4. Test it
 
-New DTOs in Integrations/BusinessCentral/DTOs/:
+dotnet build and dotnet test first. For these tests I changed the Api helper so it prints the response and returns it, so you can reuse values like the invoice id. Replace your earlier helper with this one, and keep Login, NewKey, $officerTok and $body from the S6.4 tests:
 
-csharp
-// BcAgedReceivablesRowDto.cs
-namespace UniversityPortal.API.Integrations.BusinessCentral.DTOs;
-
-public class BcAgedReceivablesRowDto
-{
-    public Guid CustomerId { get; set; }          // empty GUID on the company "Total" row
-    public string CustomerNumber { get; set; } = string.Empty;
-    public string Name { get; set; } = string.Empty;
-    public decimal BalanceDue { get; set; }       // sum of all buckets: the total outstanding
-    public decimal CurrentAmount { get; set; }
-    public decimal Period1Amount { get; set; }
-    public decimal Period2Amount { get; set; }
-    public decimal Period3Amount { get; set; }
-    public DateOnly AgedAsOfDate { get; set; }
-    public string PeriodLengthFilter { get; set; } = string.Empty;
-}
-csharp
-// BcBalanceQuery.cs
-namespace UniversityPortal.API.Integrations.BusinessCentral.DTOs;
-
-public record BcBalanceQuery(decimal MinBalance, bool OverdueOnly, int Skip, int Top);
-
-Add to IBusinessCentralClient:
-
-csharp
-Task<BcPagedList<BcCustomerFinancialDetailsDto></bccustomerfinancialdetailsdto>> QueryCustomerFinancialDetailsAsync(
-    BcBalanceQuery query, CancellationToken ct = default);
-
-Task<IReadOnlyList<BcCustomerDto></bccustomerdto>> GetCustomersByNumbersAsync(
-    IReadOnlyCollection<string></string> numbers, CancellationToken ct = default);
-
-Task<BcAgedReceivablesRowDto?> GetAgedReceivablesTotalAsync(CancellationToken ct = default);
-
-Add to BusinessCentralClient:
-
-csharp
-public async Task<BcPagedList<BcCustomerFinancialDetailsDto></bccustomerfinancialdetailsdto>> QueryCustomerFinancialDetailsAsync(
-    BcBalanceQuery q, CancellationToken ct = default)
-{
-    // Invariant culture matters: a decimal formatted as "1,5" would break the OData filter
-    var clauses = new List<string></string> { FormattableString.Invariant($"balance gt {q.MinBalance}") };
-    if (q.OverdueOnly) clauses.Add("overdueAmount gt 0");
-
-    var parts = new List<string></string>
-    {
-        "$count=true",
-        $"$top={q.Top}",
-        $"$skip={q.Skip}",
-        "$orderby=" + Uri.EscapeDataString("balance desc,number asc"),
-        "$filter=" + Uri.EscapeDataString(string.Join(" and ", clauses))
-    };
-
-    var response = await GetAsync<BcListResponse<BcCustomerFinancialDetailsDto></bccustomerfinancialdetailsdto>>(
-        CompanyPath("customerFinancialDetails?" + string.Join("&", parts)), ct);
-
-    return new BcPagedList<BcCustomerFinancialDetailsDto></bccustomerfinancialdetailsdto>(
-        response?.Value ?? new List<BcCustomerFinancialDetailsDto></bccustomerfinancialdetailsdto>(), response?.Count);
+powershell
+function Api($method, $path, $tok, $body, $headers) {
+    $p = @{ Uri = "$apiBase$path"; Method = $method; SkipHttpErrorCheck = $true
+            StatusCodeVariable = "sc"; ContentType = "application/json" }
+    if ($tok)     { $p.Authentication = "Bearer"; $p.Token = $tok }
+    if ($body)    { $p.Body = ($body | ConvertTo-Json -Depth 6) }
+    if ($headers) { $p.Headers = $headers }
+    $r = Invoke-RestMethod @p
+    Write-Host "status: $sc"
+    if ($r) { $r | ConvertTo-Json -Depth 6 | Write-Host }
+    $r
 }
 
-public async Task<IReadOnlyList<BcCustomerDto></bccustomerdto>> GetCustomersByNumbersAsync(
-    IReadOnlyCollection<string></string> numbers, CancellationToken ct = default)
-{
-    if (numbers.Count == 0) return Array.Empty<BcCustomerDto></bccustomerdto>();
+$api = "http://localhost:7048/BC260/api/techworks/universityPortal/v1.0/companies(2112d28e-f0dc-f111-9b9b-5c879cb5ec66)"
+$h = @{ UseDefaultCredentials = $true; AllowUnencryptedAuthentication = $true }
 
-    var distinct = numbers.Distinct().ToList();
-    var filter = Uri.EscapeDataString(string.Join(" or ",
-        distinct.Select(n => $"number eq '{n.Replace("'", "''")}'")));
+A. Post a draft (this creates one more permanent 220 invoice for customer 20000 in UniversityDev):
 
-    var response = await GetAsync<BcListResponse<BcCustomerDto></bccustomerdto>>(
-        CompanyPath($"customers?$filter={filter}&$top={distinct.Count}"), ct);
-    return response?.Value ?? new List<BcCustomerDto></bccustomerdto>();
-}
+powershell
+$d = Api POST "/api/officer/finance/invoices" $officerTok $body @{ "Idempotency-Key" = (NewKey) }
+$id = $d.bcInvoiceId
+"Draft number: $($d.invoiceNumber)"
 
-// BC computes this report across all customers, so it grows with the student count.
-// We read every row and pick the company "Total" row (the one with no customer).
-public async Task<BcAgedReceivablesRowDto?> GetAgedReceivablesTotalAsync(CancellationToken ct = default)
-{
-    var response = await GetAsync<BcListResponse<BcAgedReceivablesRowDto></bcagedreceivablesrowdto>>(
-        CompanyPath("agedAccountsReceivables"), ct);
-    return response?.Value.FirstOrDefault(r => r.CustomerId == Guid.Empty);
-}
-2. Finance module additions
+# Expect 200: status Open, a NEW invoice number, paymentStatus Unpaid, amountRemaining 220
 
-Add to DTOs/FinanceDtos.cs:
+$p = Api POST "/api/officer/finance/invoices/$id/post" $officerTok
 
-csharp
-public record AgingBucketDto(string Label, decimal Amount);
+# Post again: expect 200 and the same posted invoice, not an error
 
-public record OfficerDashboardDto(
-    DateOnly AsOfDate,
-    decimal TotalOutstanding,
-    IReadOnlyList<AgingBucketDto></agingbucketdto> Aging,
-    int StudentsWithBalance,
-    int StudentsWithOverdue,
-    int DraftInvoices,
-    int InvoicesInReview,
-    DateTime GeneratedAtUtc);
+Api POST "/api/officer/finance/invoices/$id/post" $officerTok
 
-public record OutstandingBalanceDto(
-    string StudentNumber,
-    string StudentName,
-    string Email,
-    string PhoneNumber,
-    decimal Balance,
-    decimal OverdueAmount);
+B. Check BC agrees:
 
-public class OutstandingBalanceQuery
-{
-    [Range(typeof(decimal), "0", "1000000000")]
-    public decimal MinBalance { get; set; } = 0;
+powershell
 
-    public bool OverdueOnly { get; set; }
+# The ledger entry for the posted number: amount 220, remaining 220, open
 
-    [Range(1, 10000)]
-    public int Page { get; set; } = 1;
+$lf = [uri]::EscapeDataString("documentNumber eq '$($p.invoiceNumber)'")
+(Invoke-RestMethod "$api/customerLedgerEntries?`$filter=$lf" @h).value |
+    Select-Object entryNumber, documentType, documentNumber, amount, remainingAmount, open
 
-    // Capped at 50 because each page triggers a customer lookup that lists these numbers in the URL
-    [Range(1, 50)]
-    public int PageSize { get; set; } = 25;
-}
+Then call the student’s statement as customer 20000 (GET /api/student/finance/statement) and confirm the new posted invoice appears, unpaid, with the balance up by 220. The officer dashboard’s totalOutstanding should rise by 220, and its draftInvoices count should be unchanged by the posted invoice.
 
-Add to IOfficerFinanceService:
+C. Discard a draft:
 
-csharp
-Task<OfficerDashboardDto></officerdashboarddto> GetDashboardAsync(CancellationToken ct);
-Task<PagedResult<OutstandingBalanceDto></outstandingbalancedto>> GetOutstandingBalancesAsync(
-    OutstandingBalanceQuery query, CancellationToken ct);
+powershell
+$key2 = NewKey
+$d2 = Api POST "/api/officer/finance/invoices" $officerTok $body @{ "Idempotency-Key" = $key2 }
 
-Add to OfficerFinanceService:
+Api DELETE "/api/officer/finance/invoices/$($d2.bcInvoiceId)" $officerTok     # 204
+Api DELETE "/api/officer/finance/invoices/$($d2.bcInvoiceId)" $officerTok     # 204 again: already discarded
+Api GET "/api/officer/finance/invoices/$($d2.bcInvoiceId)" $officerTok        # 404: it's gone from BC
 
-csharp
-public async Task<OfficerDashboardDto></officerdashboarddto> GetDashboardAsync(CancellationToken ct)
-{
-    RequireOfficer();
+# The key is free again: the same request creates a NEW draft (201), which we discard to tidy up
 
-    var agedTask = _bc.GetAgedReceivablesTotalAsync(ct);
-    // Top = 1: we only want the total count BC reports, not the records
-    var withBalanceTask = _bc.QueryCustomerFinancialDetailsAsync(new BcBalanceQuery(0, false, 0, 1), ct);
-    var overdueTask = _bc.QueryCustomerFinancialDetailsAsync(new BcBalanceQuery(0, true, 0, 1), ct);
-    var draftsTask = _bc.QuerySalesInvoicesAsync(
-        new BcInvoiceQuery(null, new[] { "Draft" }, null, null, 0, 1), ct);
-    var reviewTask = _bc.QuerySalesInvoicesAsync(
-        new BcInvoiceQuery(null, new[] { "In Review" }, null, null, 0, 1), ct);
+$d3 = Api POST "/api/officer/finance/invoices" $officerTok $body @{ "Idempotency-Key" = $key2 }
+Api DELETE "/api/officer/finance/invoices/$($d3.bcInvoiceId)" $officerTok
 
-    await Task.WhenAll(agedTask, withBalanceTask, overdueTask, draftsTask, reviewTask);
+D. Rules:
 
-    var aged = await agedTask;
-    var now = _time.GetUtcNow().UtcDateTime;
+powershell
 
-    return new OfficerDashboardDto(
-        AsOfDate: aged?.AgedAsOfDate ?? DateOnly.FromDateTime(now),
-        TotalOutstanding: aged?.BalanceDue ?? 0,
-        Aging: new List<AgingBucketDto></agingbucketdto>
-        {
-            new("Current (not yet due)", aged?.CurrentAmount ?? 0),
-            new("1-30 days", aged?.Period1Amount ?? 0),
-            new("31-60 days", aged?.Period2Amount ?? 0),
-            new("Over 60 days", aged?.Period3Amount ?? 0)
-        },
-        StudentsWithBalance: (await withBalanceTask).TotalCount ?? 0,
-        StudentsWithOverdue: (await overdueTask).TotalCount ?? 0,
-        DraftInvoices: (await draftsTask).TotalCount ?? 0,
-        InvoicesInReview: (await reviewTask).TotalCount ?? 0,
-        GeneratedAtUtc: now);
-}
+# A posted invoice cannot be discarded: 422 pointing to a credit memo
 
-public async Task<PagedResult<OutstandingBalanceDto></outstandingbalancedto>> GetOutstandingBalancesAsync(
-    OutstandingBalanceQuery query, CancellationToken ct)
-{
-    RequireOfficer();
+Api DELETE "/api/officer/finance/invoices/$id" $officerTok
 
-    var skip = (query.Page - 1) * query.PageSize;
-    var page = await _bc.QueryCustomerFinancialDetailsAsync(
-        new BcBalanceQuery(query.MinBalance, query.OverdueOnly, skip, query.PageSize), ct);
+# A draft the portal didn't create (take an id from GET /api/officer/finance/invoices?status=Draft): 422
 
-    // The balances carry no names, so look up this page's customers in one call
-    var customers = await _bc.GetCustomersByNumbersAsync(
-        page.Items.Select(i => i.Number).ToList(), ct);
-    var byNumber = customers.ToDictionary(c => c.Number, StringComparer.Ordinal);
+Api POST "/api/officer/finance/invoices/<id of a demo draft></id>/post" $officerTok
 
-    var items = page.Items.Select(d =>
-    {
-        byNumber.TryGetValue(d.Number, out var c);
-        return new OutstandingBalanceDto(
-            d.Number, c?.DisplayName ?? string.Empty, c?.Email ?? string.Empty,
-            c?.PhoneNumber ?? string.Empty, d.Balance, d.OverdueAmount);
-    }).ToList();
+# Made-up id: 404
 
-    return new PagedResult<OutstandingBalanceDto></outstandingbalancedto>(
-        items, query.Page, query.PageSize, page.TotalCount ?? skip + items.Count);
-}
+Api POST "/api/officer/finance/invoices/$([guid]::NewGuid())/post" $officerTok
 
-Add to OfficerFinanceController:
+# Student or admin: 403. No token: 401.
 
-csharp
-[HttpGet("dashboard")]
-public async Task<ActionResult<OfficerDashboardDto></officerdashboarddto>> GetDashboard(CancellationToken ct) =>
-    Ok(await _finance.GetDashboardAsync(ct));
+$studentTok = Login "<student email></student>" "<student password></student>"
+Api POST "/api/officer/finance/invoices/$id/post" $studentTok
+Api POST "/api/officer/finance/invoices/$id/post" $null
 
-[HttpGet("outstanding-balances")]
-public async Task<ActionResult<PagedResult<OutstandingBalanceDto></outstandingbalancedto>>> GetOutstandingBalances(
-    [FromQuery] OutstandingBalanceQuery query, CancellationToken ct) =>
-    Ok(await _finance.GetOutstandingBalancesAsync(query, ct));
+E. The two-officer rule. In appsettings.Development.json set PostingRequiresDifferentOfficer to true and restart. Create a second officer if you don’t have one (POST /api/admin/users with role FinanceOfficer). Then:
+
+powershell
+$d4 = Api POST "/api/officer/finance/invoices" $officerTok $body @{ "Idempotency-Key" = (NewKey) }
+Api POST "/api/officer/finance/invoices/$($d4.bcInvoiceId)/post" $officerTok     # 403: second officer required
+$officer2Tok = Login "<second officer email></second>" "<second officer password></second>"
+Api POST "/api/officer/finance/invoices/$($d4.bcInvoiceId)/post" $officer2Tok    # 200
+
+Afterwards set it back to false if you want a one-officer dev setup. This posts another permanent invoice, which is fine in the sandbox.

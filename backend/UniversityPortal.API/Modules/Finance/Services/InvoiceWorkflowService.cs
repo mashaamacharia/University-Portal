@@ -15,7 +15,9 @@ using UniversityPortal.API.Integrations.BusinessCentral.Clients;
 using UniversityPortal.API.Integrations.BusinessCentral.DTOs;
 using UniversityPortal.API.Integrations.BusinessCentral.Exceptions;
 using UniversityPortal.API.Modules.Finance.DTOs;
+using UniversityPortal.API.Modules.Finance.Configuration;
 using UniversityPortal.API.Modules.Finance.Models;
+using Microsoft.Extensions.Options;
 
 namespace UniversityPortal.API.Modules.Finance.Services;
 
@@ -29,6 +31,10 @@ public interface IInvoiceWorkflowService
         CancellationToken ct);
 
     Task<OfficerInvoiceDetailDto> GetInvoiceAsync(Guid bcInvoiceId, CancellationToken ct);
+
+    Task<OfficerInvoiceDetailDto> PostAsync(Guid bcInvoiceId, CancellationToken ct);
+
+    Task DiscardAsync(Guid bcInvoiceId, CancellationToken ct);
 }
 
 public class InvoiceWorkflowService : IInvoiceWorkflowService
@@ -43,6 +49,7 @@ public class InvoiceWorkflowService : IInvoiceWorkflowService
     private readonly ICurrentUser _user;
     private readonly IAuditLog _audit;
     private readonly TimeProvider _time;
+    private readonly FinanceOptions _finance;
     private readonly ILogger<InvoiceWorkflowService> _logger;
 
     public InvoiceWorkflowService(
@@ -51,6 +58,7 @@ public class InvoiceWorkflowService : IInvoiceWorkflowService
         ICurrentUser user,
         IAuditLog audit,
         TimeProvider time,
+        IOptions<FinanceOptions> finance,
         ILogger<InvoiceWorkflowService> logger)
     {
         _bc = bc;
@@ -58,6 +66,7 @@ public class InvoiceWorkflowService : IInvoiceWorkflowService
         _user = user;
         _audit = audit;
         _time = time;
+        _finance = finance.Value;
         _logger = logger;
     }
 
@@ -65,6 +74,211 @@ public class InvoiceWorkflowService : IInvoiceWorkflowService
     {
         RequireOfficer();
         return await LoadDetailAsync(bcInvoiceId, ct);
+    }
+
+    public async Task<OfficerInvoiceDetailDto> PostAsync(Guid bcInvoiceId, CancellationToken ct)
+    {
+        RequireOfficer();
+        var userId = _user.UserId ?? throw new NotAuthenticatedException();
+        var record = await RequirePortalInvoiceAsync(bcInvoiceId, ct);
+
+        var invoice = await GetInvoiceByIdOrKeyAsync(record, ct);
+        if (invoice is null)
+        {
+            await SetStateAsync(
+                record,
+                InvoiceRequestStatus.Discarded,
+                "Invoice no longer exists in Business Central",
+                ct);
+            throw new NotFoundException($"BC invoice {bcInvoiceId} no longer exists");
+        }
+
+        var status = FinanceMapper.ParseStatus(invoice.Status);
+        if (IsPosted(status))
+        {
+            await ReconcilePostedAsync(record, invoice, ct);
+            return await BuildDetailAsync(invoice, ct);
+        }
+
+        if (record.Status == InvoiceRequestStatus.Discarded || status != InvoiceStatus.Draft)
+        {
+            throw new PortalException(
+                StatusCodes.Status422UnprocessableEntity,
+                "Invoice cannot be posted",
+                record.Status == InvoiceRequestStatus.Discarded
+                    ? "This invoice was discarded and cannot be posted."
+                    : $"The invoice is '{status}' in Business Central, and only drafts can be posted.");
+        }
+
+        if (_finance.PostingRequiresDifferentOfficer && record.CreatedByUserId == userId)
+        {
+            throw new PortalException(
+                StatusCodes.Status403Forbidden,
+                "Second officer required",
+                "This invoice must be posted by a different officer than the one who created it.");
+        }
+
+        try
+        {
+            await _bc.PostSalesInvoiceAsync(bcInvoiceId, ct);
+        }
+        catch (BcRejectedException ex)
+        {
+            var current = await GetInvoiceByIdOrKeyAsync(record, ct);
+            if (current is not null && IsPosted(FinanceMapper.ParseStatus(current.Status)))
+            {
+                await ReconcilePostedAsync(record, current, ct);
+                return await BuildDetailAsync(current, ct);
+            }
+
+            await SetStateAsync(record, record.Status, ex.PublicDetail, ct);
+            await AuditAsync(
+                "invoice.post.rejected",
+                bcInvoiceId,
+                false,
+                new
+                {
+                    draftNumber = record.BcInvoiceNumber,
+                    reason = ex.PublicDetail,
+                    bcCorrelation = ex.CorrelationId
+                },
+                ct);
+            throw;
+        }
+        catch (BcIntegrationException ex) when (ex.OutcomeUnknown)
+        {
+            BcSalesInvoiceDto? current;
+            try
+            {
+                current = await GetInvoiceByIdOrKeyAsync(record, ct);
+            }
+            catch (BcIntegrationException lookupException)
+            {
+                _logger.LogWarning(
+                    lookupException,
+                    "Could not reconcile invoice {BcInvoiceId} after an uncertain post",
+                    bcInvoiceId);
+                current = null;
+            }
+
+            if (current is null || !IsPosted(FinanceMapper.ParseStatus(current.Status)))
+            {
+                await AuditAsync(
+                    "invoice.post.outcome_unknown",
+                    bcInvoiceId,
+                    false,
+                    new { draftNumber = record.BcInvoiceNumber, kind = ex.Kind.ToString() },
+                    ct);
+                throw;
+            }
+
+            await MarkPostedAsync(record, current, userId, ct);
+            return await BuildDetailAsync(current, ct);
+        }
+
+        var posted = await GetInvoiceByIdOrKeyAsync(record, ct);
+        if (posted is null || !IsPosted(FinanceMapper.ParseStatus(posted.Status)))
+        {
+            throw new BcIntegrationException(
+                BcFailureKind.InvalidResponse,
+                $"BC accepted posting invoice {bcInvoiceId}, but its posted state could not be confirmed.");
+        }
+
+        await MarkPostedAsync(record, posted, userId, ct);
+        return await BuildDetailAsync(posted, ct);
+    }
+
+    public async Task DiscardAsync(Guid bcInvoiceId, CancellationToken ct)
+    {
+        RequireOfficer();
+        var record = await RequirePortalInvoiceAsync(bcInvoiceId, ct);
+        if (record.Status == InvoiceRequestStatus.Discarded)
+            return;
+
+        var invoice = await GetInvoiceByIdOrKeyAsync(record, ct);
+        if (invoice is not null)
+        {
+            if (IsPosted(FinanceMapper.ParseStatus(invoice.Status)))
+            {
+                await ReconcilePostedAsync(record, invoice, ct);
+                throw new PortalException(
+                    StatusCodes.Status422UnprocessableEntity,
+                    "Invoice already posted",
+                    "A posted invoice cannot be discarded. Issue a credit memo in Business Central instead.");
+            }
+
+            try
+            {
+                await _bc.DeleteDraftSalesInvoiceAsync(bcInvoiceId, ct);
+            }
+            catch (BcRejectedException ex)
+            {
+                var current = await GetInvoiceByIdOrKeyAsync(record, ct);
+                if (current is not null && IsPosted(FinanceMapper.ParseStatus(current.Status)))
+                {
+                    await ReconcilePostedAsync(record, current, ct);
+                    throw new PortalException(
+                        StatusCodes.Status422UnprocessableEntity,
+                        "Invoice already posted",
+                        "A posted invoice cannot be discarded. Issue a credit memo in Business Central instead.");
+                }
+
+                await AuditAsync(
+                    "invoice.draft.discard_rejected",
+                    bcInvoiceId,
+                    false,
+                    new
+                    {
+                        draftNumber = record.BcInvoiceNumber,
+                        reason = ex.PublicDetail,
+                        bcCorrelation = ex.CorrelationId
+                    },
+                    ct);
+                throw;
+            }
+            catch (BcIntegrationException ex) when (ex.Kind == BcFailureKind.NotFound)
+            {
+                _logger.LogInformation(
+                    "Draft invoice {BcInvoiceId} was already absent from Business Central",
+                    bcInvoiceId);
+            }
+            catch (BcIntegrationException ex) when (ex.OutcomeUnknown)
+            {
+                var lookedUp = false;
+                BcSalesInvoiceDto? stillThere = null;
+                try
+                {
+                    stillThere = await GetInvoiceByIdOrKeyAsync(record, ct);
+                    lookedUp = true;
+                }
+                catch (BcIntegrationException lookupException)
+                {
+                    _logger.LogWarning(
+                        lookupException,
+                        "Could not reconcile invoice {BcInvoiceId} after an uncertain discard",
+                        bcInvoiceId);
+                }
+
+                if (!lookedUp || stillThere is not null)
+                {
+                    await AuditAsync(
+                        "invoice.draft.discard_outcome_unknown",
+                        bcInvoiceId,
+                        false,
+                        new { draftNumber = record.BcInvoiceNumber, kind = ex.Kind.ToString() },
+                        ct);
+                    throw;
+                }
+            }
+        }
+
+        await SetStateAsync(record, InvoiceRequestStatus.Discarded, null, ct);
+        await AuditAsync(
+            "invoice.draft.discarded",
+            bcInvoiceId,
+            true,
+            new { draftNumber = record.BcInvoiceNumber, studentNumber = record.StudentNumber },
+            ct);
     }
 
     public async Task<InvoiceCreationResult> CreateDraftAsync(
@@ -322,6 +536,108 @@ public class InvoiceWorkflowService : IInvoiceWorkflowService
                 "Business Central holds more than one invoice with this key. Do not retry; ask an administrator to review.",
                 $"{found.Count} BC invoices carry the key {key}")
         };
+    }
+
+    private async Task<InvoiceRequest> RequirePortalInvoiceAsync(Guid bcInvoiceId, CancellationToken ct)
+    {
+        var record = await _db.InvoiceRequests.FirstOrDefaultAsync(
+            request => request.BcInvoiceId == bcInvoiceId,
+            ct);
+        if (record is not null)
+            return record;
+
+        var existsInBc = await _bc.GetSalesInvoiceByIdAsync(bcInvoiceId, ct) is not null;
+        throw existsInBc
+            ? new PortalException(
+                StatusCodes.Status422UnprocessableEntity,
+                "Not a portal invoice",
+                "This invoice was not created through the portal, so it cannot be posted or discarded here.")
+            : new NotFoundException($"No invoice {bcInvoiceId} in the portal or in BC");
+    }
+
+    private async Task<BcSalesInvoiceDto?> GetInvoiceByIdOrKeyAsync(InvoiceRequest record, CancellationToken ct)
+    {
+        var invoice = record.BcInvoiceId is { } id
+            ? await _bc.GetSalesInvoiceByIdAsync(id, ct)
+            : null;
+
+        if (invoice is not null || string.IsNullOrWhiteSpace(record.IdempotencyKey))
+            return invoice;
+
+        return await FindByKeyAsync(record.IdempotencyKey, ct);
+    }
+
+    private static bool IsPosted(InvoiceStatus status) =>
+        status is InvoiceStatus.Open or InvoiceStatus.Paid or InvoiceStatus.Corrective;
+
+    private async Task MarkPostedAsync(
+        InvoiceRequest record,
+        BcSalesInvoiceDto posted,
+        Guid postedBy,
+        CancellationToken ct)
+    {
+        var draftNumber = record.BcInvoiceNumber;
+        var now = _time.GetUtcNow().UtcDateTime;
+        record.Status = InvoiceRequestStatus.Posted;
+        record.BcInvoiceNumber = posted.Number;
+        record.PostedByUserId = postedBy;
+        record.PostedAtUtc = now;
+        record.UpdatedAtUtc = now;
+        record.LastError = null;
+
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Could not record the posting of invoice {BcInvoiceId}", posted.Id);
+        }
+
+        await AuditAsync(
+            "invoice.posted",
+            posted.Id,
+            true,
+            new
+            {
+                studentNumber = record.StudentNumber,
+                draftNumber,
+                postedNumber = posted.Number,
+                total = posted.TotalAmountIncludingTax
+            },
+            ct);
+    }
+
+    private async Task ReconcilePostedAsync(InvoiceRequest record, BcSalesInvoiceDto posted, CancellationToken ct)
+    {
+        await _db.Entry(record).ReloadAsync(ct);
+        if (record.Status == InvoiceRequestStatus.Posted)
+            return;
+
+        record.Status = InvoiceRequestStatus.Posted;
+        record.BcInvoiceNumber = posted.Number;
+        record.UpdatedAtUtc = _time.GetUtcNow().UtcDateTime;
+        record.LastError = null;
+
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Could not reconcile invoice request {RequestId}", record.Id);
+        }
+
+        await AuditAsync(
+            "invoice.post.reconciled",
+            posted.Id,
+            true,
+            new
+            {
+                postedNumber = posted.Number,
+                note = "BC showed the invoice as posted before the portal's record did"
+            },
+            ct);
     }
 
     private async Task AdoptAsync(
