@@ -227,6 +227,148 @@ public class InvoiceWorkflowTests : IClassFixture<PortalApiFactory>
         Assert.Equal(HttpStatusCode.BadRequest, invalidLineType.StatusCode);
     }
 
+    [Fact]
+    public async Task Posting_requires_a_second_officer_then_returns_the_same_posted_invoice_on_retry()
+    {
+        using var creator = await _factory.ClientForRoleAsync("FinanceOfficer");
+        var (invoiceId, _) = await CreateDraftAsync(creator);
+
+        using var sameOfficerAttempt = await creator.PostAsync($"/api/officer/finance/invoices/{invoiceId}/post", null);
+        Assert.Equal(HttpStatusCode.Forbidden, sameOfficerAttempt.StatusCode);
+
+        var secondOfficerAccount = await _factory.CreateAccountAsync("FinanceOfficer");
+        using var secondOfficer = await _factory.LoginAsync(secondOfficerAccount.Email, secondOfficerAccount.Password);
+        using var postedResponse = await secondOfficer.PostAsync(
+            $"/api/officer/finance/invoices/{invoiceId}/post",
+            null);
+        using var postedBody = await postedResponse.Content.ReadFromJsonAsync<JsonDocument>()
+            ?? throw new InvalidOperationException("The post endpoint returned an empty response.");
+
+        Assert.Equal(HttpStatusCode.OK, postedResponse.StatusCode);
+        Assert.Equal("Open", postedBody.RootElement.GetProperty("status").GetString());
+        var postedNumber = postedBody.RootElement.GetProperty("invoiceNumber").GetString();
+        Assert.NotNull(postedNumber);
+
+        using var retry = await creator.PostAsync($"/api/officer/finance/invoices/{invoiceId}/post", null);
+        using var retryBody = await retry.Content.ReadFromJsonAsync<JsonDocument>()
+            ?? throw new InvalidOperationException("The post retry returned an empty response.");
+        Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
+        Assert.Equal(postedNumber, retryBody.RootElement.GetProperty("invoiceNumber").GetString());
+        Assert.Equal("Open", retryBody.RootElement.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task Post_rejection_keeps_the_invoice_as_a_draft_and_can_be_retried()
+    {
+        using var creator = await _factory.ClientForRoleAsync("FinanceOfficer");
+        var (invoiceId, _) = await CreateDraftAsync(creator);
+        var secondOfficerAccount = await _factory.CreateAccountAsync("FinanceOfficer");
+        using var secondOfficer = await _factory.LoginAsync(secondOfficerAccount.Email, secondOfficerAccount.Password);
+        _factory.Bc.SimulatePostRejection = true;
+
+        using var rejected = await secondOfficer.PostAsync(
+            $"/api/officer/finance/invoices/{invoiceId}/post",
+            null);
+        using var rejectedBody = await rejected.Content.ReadFromJsonAsync<JsonDocument>()
+            ?? throw new InvalidOperationException("The rejected post response was empty.");
+        using var draft = await creator.GetAsync($"/api/officer/finance/invoices/{invoiceId}");
+        using var draftBody = await draft.Content.ReadFromJsonAsync<JsonDocument>()
+            ?? throw new InvalidOperationException("The invoice review response was empty.");
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, rejected.StatusCode);
+        Assert.Contains("Posting date is not allowed", rejectedBody.RootElement.GetProperty("detail").GetString());
+        Assert.Equal("Draft", draftBody.RootElement.GetProperty("status").GetString());
+
+        using var retry = await secondOfficer.PostAsync($"/api/officer/finance/invoices/{invoiceId}/post", null);
+        Assert.Equal(HttpStatusCode.OK, retry.StatusCode);
+    }
+
+    [Fact]
+    public async Task An_uncertain_post_is_reconciled_when_business_central_shows_it_posted()
+    {
+        using var creator = await _factory.ClientForRoleAsync("FinanceOfficer");
+        var (invoiceId, _) = await CreateDraftAsync(creator);
+        var secondOfficerAccount = await _factory.CreateAccountAsync("FinanceOfficer");
+        using var secondOfficer = await _factory.LoginAsync(secondOfficerAccount.Email, secondOfficerAccount.Password);
+        _factory.Bc.SimulateUnknownOutcomeAfterPost = true;
+
+        using var response = await secondOfficer.PostAsync(
+            $"/api/officer/finance/invoices/{invoiceId}/post",
+            null);
+        using var body = await response.Content.ReadFromJsonAsync<JsonDocument>()
+            ?? throw new InvalidOperationException("The post response was empty.");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("Open", body.RootElement.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task Discard_is_idempotent_and_posted_or_nonportal_invoices_cannot_be_discarded()
+    {
+        using var officer = await _factory.ClientForRoleAsync("FinanceOfficer");
+        var (draftId, _) = await CreateDraftAsync(officer);
+
+        using var discarded = await officer.DeleteAsync($"/api/officer/finance/invoices/{draftId}");
+        using var repeatedDiscard = await officer.DeleteAsync($"/api/officer/finance/invoices/{draftId}");
+        Assert.Equal(HttpStatusCode.NoContent, discarded.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, repeatedDiscard.StatusCode);
+        Assert.Null(await _factory.Bc.GetSalesInvoiceByIdAsync(draftId));
+
+        var (invoiceId, _) = await CreateDraftAsync(officer);
+        var secondOfficerAccount = await _factory.CreateAccountAsync("FinanceOfficer");
+        using var secondOfficer = await _factory.LoginAsync(secondOfficerAccount.Email, secondOfficerAccount.Password);
+        using var posted = await secondOfficer.PostAsync($"/api/officer/finance/invoices/{invoiceId}/post", null);
+        Assert.Equal(HttpStatusCode.OK, posted.StatusCode);
+
+        using var discardPosted = await officer.DeleteAsync($"/api/officer/finance/invoices/{invoiceId}");
+        using var postedBody = await discardPosted.Content.ReadFromJsonAsync<JsonDocument>()
+            ?? throw new InvalidOperationException("The discard response was empty.");
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, discardPosted.StatusCode);
+        Assert.Contains("cannot be discarded", postedBody.RootElement.GetProperty("detail").GetString());
+
+        using var nonPortal = await officer.DeleteAsync(
+            $"/api/officer/finance/invoices/{_factory.Bc.NonPortalInvoiceId}");
+        using var unknown = await officer.DeleteAsync(
+            $"/api/officer/finance/invoices/{Guid.NewGuid()}");
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, nonPortal.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+    }
+
+    [Fact]
+    public async Task Posting_nonportal_and_unknown_invoices_is_rejected()
+    {
+        using var officer = await _factory.ClientForRoleAsync("FinanceOfficer");
+
+        using var nonPortal = await officer.PostAsync(
+            $"/api/officer/finance/invoices/{_factory.Bc.NonPortalInvoiceId}/post",
+            null);
+        using var unknown = await officer.PostAsync(
+            $"/api/officer/finance/invoices/{Guid.NewGuid()}/post",
+            null);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, nonPortal.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+    }
+
+    private async Task<(Guid Id, string Number)> CreateDraftAsync(HttpClient officer)
+    {
+        var key = $"fee-{Guid.NewGuid():N}"[..20];
+        using var response = await PostInvoiceAsync(
+            officer,
+            new
+            {
+                studentNumber = FakeBusinessCentralClient.StudentA,
+                lines = new[] { new { lineType = "Item", number = "SER203", quantity = 1, unitPrice = 100 } }
+            },
+            key);
+        using var body = await response.Content.ReadFromJsonAsync<JsonDocument>()
+            ?? throw new InvalidOperationException("The invoice endpoint returned an empty response.");
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return (
+            body.RootElement.GetProperty("bcInvoiceId").GetGuid(),
+            body.RootElement.GetProperty("invoiceNumber").GetString() ?? string.Empty);
+    }
+
     private static async Task<HttpResponseMessage> PostInvoiceAsync(HttpClient client, object body, string? key = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/officer/finance/invoices")

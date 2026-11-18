@@ -82,6 +82,8 @@ flowchart TD
 - Provide finance officers with paged payment records across students, including the student name and currency resolved from the customer record.
 - Create Business Central invoice drafts through `POST /api/officer/finance/invoices`; finance officers can review a draft by its Business Central ID. Creation validates the customer and each item/account against Business Central before writing.
 - Require an `Idempotency-Key` for invoice creation. Persist the request hash and state before calling Business Central, use the key as the external document number, and reconcile uncertain write outcomes by searching Business Central before any retry.
+- Let finance officers post or discard only invoices created through the portal. Posting is idempotent and reconciles Business Central state after uncertain responses; discarding is idempotent for drafts, while posted invoices require a credit memo instead.
+- Require a different finance officer to post an invoice in normal deployments. Development can disable this separation-of-duties check for local testing.
 - Handle pagination, timeouts and API errors.
 - Apply safe retry and duplicate-prevention strategies to write operations.
 - Validate Business Central settings at startup and use bounded timeouts, retries and a circuit breaker for outbound requests. Retries are disabled for unsafe HTTP methods.

@@ -48,6 +48,19 @@ public class OfficerFinanceController : ControllerBase
             : Ok(result.Invoice);
     }
 
+    [HttpPost("invoices/{bcInvoiceId:guid}/post")]
+    public async Task<ActionResult<OfficerInvoiceDetailDto>> PostInvoice(
+        Guid bcInvoiceId,
+        CancellationToken ct) =>
+        Ok(await _workflow.PostAsync(bcInvoiceId, ct));
+
+    [HttpDelete("invoices/{bcInvoiceId:guid}")]
+    public async Task<IActionResult> DiscardDraft(Guid bcInvoiceId, CancellationToken ct)
+    {
+        await _workflow.DiscardAsync(bcInvoiceId, ct);
+        return NoContent();
+    }
+
     [HttpGet("dashboard")]
     public async Task<ActionResult<OfficerDashboardDto>> GetDashboard(CancellationToken ct) =>
         Ok(await _finance.GetDashboardAsync(ct));

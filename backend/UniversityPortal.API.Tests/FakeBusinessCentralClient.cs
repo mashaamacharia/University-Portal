@@ -51,9 +51,17 @@ public class FakeBusinessCentralClient : IBusinessCentralClient
 
     public int CreatedInvoiceCount => _createdInvoices.Count;
 
+    public Guid NonPortalInvoiceId => _invoices[0].Id;
+
     public bool SimulateUnknownOutcomeBeforeCreate { get; set; }
 
     public bool SimulateUnknownOutcomeAfterCreate { get; set; }
+
+    public bool SimulateUnknownOutcomeAfterPost { get; set; }
+
+    public bool SimulateUnknownOutcomeAfterDelete { get; set; }
+
+    public bool SimulatePostRejection { get; set; }
 
     public void Reset() => _queried.Clear();
 
@@ -191,11 +199,54 @@ public class FakeBusinessCentralClient : IBusinessCentralClient
         return Task.FromResult(invoice);
     }
 
-    public Task PostSalesInvoiceAsync(Guid invoiceId, CancellationToken ct = default) =>
-        throw new NotImplementedException();
+    public Task PostSalesInvoiceAsync(Guid invoiceId, CancellationToken ct = default)
+    {
+        if (!_createdInvoices.TryGetValue(invoiceId, out var invoice))
+            throw new BcIntegrationException(BcFailureKind.NotFound, $"Invoice {invoiceId} not found");
 
-    public Task DeleteDraftSalesInvoiceAsync(Guid invoiceId, CancellationToken ct = default) =>
-        throw new NotImplementedException();
+        if (SimulatePostRejection)
+        {
+            SimulatePostRejection = false;
+            throw new BcRejectedException("Posting date is not allowed.", "Application_Error", null);
+        }
+
+        if (invoice.Status != "Draft")
+            throw new BcRejectedException(
+                "The action can be applied to a draft invoice only.",
+                "Application_Error",
+                null);
+
+        invoice.Status = "Open";
+        invoice.Number = $"POST-{Guid.NewGuid():N}"[..16];
+        invoice.PostingDate = new DateOnly(2026, 11, 18);
+
+        if (SimulateUnknownOutcomeAfterPost)
+        {
+            SimulateUnknownOutcomeAfterPost = false;
+            throw new BcIntegrationException(BcFailureKind.Timeout, "Simulated uncertain post outcome");
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteDraftSalesInvoiceAsync(Guid invoiceId, CancellationToken ct = default)
+    {
+        if (!_createdInvoices.TryGetValue(invoiceId, out var invoice))
+            throw new BcIntegrationException(BcFailureKind.NotFound, $"Invoice {invoiceId} not found");
+
+        if (invoice.Status != "Draft")
+            throw new BcRejectedException("Only a draft invoice can be deleted.", "Application_Error", null);
+
+        _createdInvoices.TryRemove(invoiceId, out _);
+        _createdInvoiceLines.TryRemove(invoiceId, out _);
+        if (SimulateUnknownOutcomeAfterDelete)
+        {
+            SimulateUnknownOutcomeAfterDelete = false;
+            throw new BcIntegrationException(BcFailureKind.Timeout, "Simulated uncertain delete outcome");
+        }
+
+        return Task.CompletedTask;
+    }
 
     public Task<BcSalesInvoiceDto?> GetSalesInvoiceByIdAsync(
         Guid invoiceId,

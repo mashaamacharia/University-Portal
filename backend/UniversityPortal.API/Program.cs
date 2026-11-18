@@ -22,7 +22,7 @@ builder.Services.AddScoped<ICurrentUser, ClaimsCurrentUser>();
 builder.Services.AddPortalPersistence(builder.Configuration);
 builder.Services.AddAdministrationModule(builder.Configuration);
 builder.Services.AddBusinessCentralIntegration(builder.Configuration);
-builder.Services.AddFinanceModule();
+builder.Services.AddFinanceModule(builder.Configuration);
 
 var app = builder.Build();
 await app.SeedIdentityAsync();
