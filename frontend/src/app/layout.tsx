@@ -1,19 +1,38 @@
 import type { Metadata } from "next";
+import { Figtree, Newsreader } from "next/font/google";
+import { Providers } from "@/components/providers";
 import "./globals.css";
 
+const figtree = Figtree({
+  subsets: ["latin"],
+  variable: "--font-figtree",
+  display: "swap",
+});
+
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  variable: "--font-newsreader",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "University Portal",
-  description: "University student finance portal",
+  title: {
+    default: "University Portal",
+    template: "%s | University Portal",
+  },
+  description: "Fees, invoices and payments for students and finance staff.",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" className={`${figtree.variable} ${newsreader.variable}`}>
+      <body className="min-h-screen antialiased">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }
