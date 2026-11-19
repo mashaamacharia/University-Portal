@@ -83,3 +83,17 @@
     font-variant-numeric: tabular-nums lining-nums;
   }
 }
+
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .shadow-card {
+    box-shadow: none;
+  }
+}

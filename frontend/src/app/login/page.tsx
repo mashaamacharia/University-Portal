@@ -1,17 +1,29 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { FileText, ShieldCheck, Wallet } from "lucide-react";
+import { ShieldCheck, Smartphone, Users } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { LoginForm } from "@/components/auth/login-form";
 import { homeForRoles, safeNext } from "@/lib/auth/roles";
 import { getCurrentUser } from "@/lib/server/session";
 
-export const metadata: Metadata = { title: "Sign in" };
+export const metadata: Metadata = {
+  title: "Sign in",
+  description: "Sign in to the university portal.",
+};
 
 const points = [
-  { icon: Wallet, text: "Your balance and what is due, always up to date." },
-  { icon: FileText, text: "Every invoice and payment in one clear history." },
-  { icon: ShieldCheck, text: "Direct from the finance system. No retyping, no guesswork." },
+  {
+    icon: Users,
+    text: "Student services and staff tools together in one portal.",
+  },
+  {
+    icon: ShieldCheck,
+    text: "Secure sign-in with access tailored to your role.",
+  },
+  {
+    icon: Smartphone,
+    text: "Works on your phone, tablet or computer.",
+  },
 ];
 
 export default async function LoginPage({
@@ -35,7 +47,7 @@ export default async function LoginPage({
         <Brand tone="light" className="relative" />
         <div className="relative max-w-md">
           <h1 className="font-serif text-5xl font-semibold leading-tight">
-            Fees, invoices and payments, clear at a glance.
+            Your university, all in one place.
           </h1>
           <ul className="mt-10 space-y-4">
             {points.map(({ icon: Icon, text }) => (
@@ -46,7 +58,7 @@ export default async function LoginPage({
             ))}
           </ul>
         </div>
-        <p className="relative text-sm text-navy-300">University Finance Office</p>
+        <p className="relative text-sm text-navy-300">University Portal</p>
       </aside>
 
       <section className="flex items-center justify-center px-6 py-12">

@@ -79,7 +79,7 @@ export function LoginForm({
       </Button>
 
       <p className="text-center text-sm text-muted">
-        Forgot your password? Ask the finance office or an administrator to reset it.
+        Forgot your password? Ask an administrator to reset it.
       </p>
     </form>
   );

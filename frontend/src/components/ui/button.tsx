@@ -19,6 +19,25 @@ const sizes: Record<Size, string> = {
   lg: "h-12 px-6 text-base gap-2",
 };
 
+/** Button look for any element, e.g. a <Link> that should look like a button. */
+export function buttonVariants({
+  variant = "primary",
+  size = "md",
+  className,
+}: {
+  variant?: Variant;
+  size?: Size;
+  className?: string;
+} = {}) {
+  return cn(
+    "inline-flex items-center justify-center rounded-lg font-medium transition-colors",
+    "disabled:cursor-not-allowed disabled:opacity-50",
+    variants[variant],
+    sizes[size],
+    className,
+  );
+}
+
 export type ButtonProps = React.ComponentProps<"button"> & {
   variant?: Variant;
   size?: Size;
@@ -40,13 +59,7 @@ export function Button({
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={cn(
-        "inline-flex items-center justify-center rounded-lg font-medium transition-colors",
-        "disabled:cursor-not-allowed disabled:opacity-50",
-        variants[variant],
-        sizes[size],
-        className,
-      )}
+      className={buttonVariants({ variant, size, className })}
       {...props}
     >
       {loading && <Loader2 className="size-4 animate-spin" aria-hidden />}
