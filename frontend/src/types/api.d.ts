@@ -350,6 +350,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/officer/finance/students": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    Search?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["StudentLookupDto"][];
+                        "application/json": components["schemas"]["StudentLookupDto"][];
+                        "text/json": components["schemas"]["StudentLookupDto"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/officer/finance/invoices": {
         parameters: {
             query?: never;
@@ -991,6 +1030,11 @@ export interface components {
             amountRemaining?: number;
             paymentStatus?: components["schemas"]["PaymentStatus"];
             lines?: components["schemas"]["InvoiceLineDto"][] | null;
+        };
+        StudentLookupDto: {
+            studentNumber?: string | null;
+            studentName?: string | null;
+            email?: string | null;
         };
         OfficerInvoiceDto: {
             invoiceNumber?: string | null;

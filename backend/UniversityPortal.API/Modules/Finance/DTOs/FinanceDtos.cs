@@ -58,6 +58,22 @@ public class CreateInvoiceRequest
 
 public record StudentInfoDto(string StudentNumber, string Name, string Email);
 
+public record StudentLookupDto(string StudentNumber, string StudentName, string Email);
+
+public class StudentLookupQuery : IValidatableObject
+{
+    [Required, StringLength(50, MinimumLength = 2)]
+    public string Search { get; set; } = string.Empty;
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext context)
+    {
+        if (string.IsNullOrWhiteSpace(Search) || Search.Trim().Length < 2)
+            yield return new ValidationResult(
+                "'Search' must contain at least 2 non-whitespace characters.",
+                new[] { nameof(Search) });
+    }
+}
+
 public record BalanceSummaryDto(string CurrencyCode, decimal Balance, decimal OverdueAmount);
 
 public record InvoiceSummaryDto(

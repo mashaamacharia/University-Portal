@@ -17,6 +17,7 @@ public class AccessRuleTests : IClassFixture<PortalApiFactory>
     [Theory]
     [InlineData("/api/student/finance/statement")]
     [InlineData("/api/officer/finance/invoices")]
+    [InlineData("/api/officer/finance/students?search=Student")]
     [InlineData("/api/admin/users")]
     [InlineData("/api/auth/me")]
     public async Task Protected_endpoints_reject_anonymous_callers(string path)
@@ -35,8 +36,10 @@ public class AccessRuleTests : IClassFixture<PortalApiFactory>
     [Theory]
     [InlineData("Student", "/api/student/finance/statement", 200)]
     [InlineData("Student", "/api/officer/finance/invoices", 403)]
+    [InlineData("Student", "/api/officer/finance/students?search=Student", 403)]
     [InlineData("Student", "/api/admin/users", 403)]
     [InlineData("FinanceOfficer", "/api/officer/finance/invoices", 200)]
+    [InlineData("FinanceOfficer", "/api/officer/finance/students?search=Student", 200)]
     [InlineData("FinanceOfficer", "/api/student/finance/statement", 403)]
     [InlineData("FinanceOfficer", "/api/admin/users", 403)]
     [InlineData("Administrator", "/api/admin/users", 200)]
@@ -47,6 +50,16 @@ public class AccessRuleTests : IClassFixture<PortalApiFactory>
         using var client = await _factory.ClientForRoleAsync(role);
         using var response = await client.GetAsync(path);
         Assert.Equal(expected, (int)response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/api/officer/finance/students?search=a")]
+    [InlineData("/api/officer/finance/students?search=%20%20")]
+    public async Task Student_lookup_rejects_search_terms_shorter_than_two_characters(string path)
+    {
+        using var officer = await _factory.ClientForRoleAsync("FinanceOfficer");
+        using var response = await officer.GetAsync(path);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]

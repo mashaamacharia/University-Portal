@@ -308,6 +308,20 @@ public class FakeBusinessCentralClient : IBusinessCentralClient
         CancellationToken ct = default) =>
         throw new NotImplementedException();
 
+    public Task<IReadOnlyList<BcCustomerDto>> SearchCustomersAsync(
+        string search,
+        int top = 10,
+        CancellationToken ct = default)
+    {
+        IReadOnlyList<BcCustomerDto> result = _customers
+            .Where(customer =>
+                customer.Number.StartsWith(search, StringComparison.OrdinalIgnoreCase) ||
+                customer.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase))
+            .Take(top)
+            .ToList();
+        return Task.FromResult(result);
+    }
+
     public Task<BcPagedList<BcCustomerFinancialDetailsDto>> QueryCustomerFinancialDetailsAsync(
         BcBalanceQuery query,
         CancellationToken ct = default) =>

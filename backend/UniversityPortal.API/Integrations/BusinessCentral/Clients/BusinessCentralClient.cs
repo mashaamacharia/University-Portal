@@ -49,6 +49,21 @@ public class BusinessCentralClient : IBusinessCentralClient
         return response?.Value ?? [];
     }
 
+    public async Task<IReadOnlyList<BcCustomerDto>> SearchCustomersAsync(
+        string search,
+        int top = 10,
+        CancellationToken ct = default)
+    {
+        ValidateCustomerSearch(search, top);
+
+        var safeSearch = search.Trim().Replace("'", "''", StringComparison.Ordinal);
+        var filter = Uri.EscapeDataString(
+            $"startswith(number, '{safeSearch}') or contains(displayName, '{safeSearch}')");
+        var url = CompanyPath($"customers?$filter={filter}&$orderby=number asc&$top={top}");
+        var response = await GetAsync<BcListResponse<BcCustomerDto>>(url, ct);
+        return response?.Value ?? [];
+    }
+
     public async Task<BcCustomerDto?> GetCustomerByNumberAsync(
         string customerNumber,
         CancellationToken ct = default)
@@ -514,6 +529,25 @@ public class BusinessCentralClient : IBusinessCentralClient
                 StatusCodes.Status400BadRequest,
                 "Invalid customer number",
                 "A customer number is required.");
+        }
+    }
+
+    private static void ValidateCustomerSearch(string search, int top)
+    {
+        if (string.IsNullOrWhiteSpace(search) || search.Trim().Length is < 2 or > 50)
+        {
+            throw new PortalException(
+                StatusCodes.Status400BadRequest,
+                "Invalid student search",
+                "The search term must contain between 2 and 50 non-whitespace characters.");
+        }
+
+        if (top is < 1 or > 20)
+        {
+            throw new PortalException(
+                StatusCodes.Status400BadRequest,
+                "Invalid student search limit",
+                "The number of results must be between 1 and 20.");
         }
     }
 
