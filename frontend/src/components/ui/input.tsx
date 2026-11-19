@@ -5,12 +5,15 @@ type InputProps = React.ComponentProps<"input"> & {
   label: string;
   hint?: string;
   error?: string;
+  /** Sits inside the right edge of the field (e.g. a show/hide button). */
+  trailing?: React.ReactNode;
 };
 
 export function Input({
   label,
   hint,
   error,
+  trailing,
   id,
   className,
   ...props
@@ -28,20 +31,28 @@ export function Input({
       <label htmlFor={inputId} className="block text-sm font-medium text-navy-900">
         {label}
       </label>
-      <input
-        id={inputId}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={describedBy}
-        className={cn(
-          "h-10 w-full rounded-lg border bg-white px-3 text-sm text-ink",
-          "placeholder:text-navy-300 disabled:bg-navy-50 disabled:text-muted",
-          error
-            ? "border-danger-600"
-            : "border-navy-200 hover:border-navy-300",
-          className,
+      <div className="relative">
+        <input
+          id={inputId}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy}
+          className={cn(
+            "h-10 w-full rounded-lg border bg-white px-3 text-sm text-ink",
+            "placeholder:text-navy-300 disabled:bg-navy-50 disabled:text-muted",
+            error
+              ? "border-danger-600"
+              : "border-navy-200 hover:border-navy-300",
+            trailing && "pr-11",
+            className,
+          )}
+          {...props}
+        />
+        {trailing && (
+          <div className="absolute inset-y-0 right-1 flex items-center">
+            {trailing}
+          </div>
         )}
-        {...props}
-      />
+      </div>
       {error ? (
         <p id={`${inputId}-error`} className="text-sm text-danger-700">
           {error}

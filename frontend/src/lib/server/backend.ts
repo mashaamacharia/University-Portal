@@ -1,11 +1,12 @@
 import "server-only";
+import { SESSION_COOKIE } from "@/lib/auth/constants";
+
+export { SESSION_COOKIE };
 
 /** Base URL of the ASP.NET API. Server-side only; never sent to the browser. */
 export const API_BASE_URL = (
   process.env.API_BASE_URL ?? "http://localhost:5073"
 ).replace(/\/+$/, "");
-
-export const SESSION_COOKIE = "portal_session";
 
 const FALLBACK_LIFETIME_SECONDS = 60 * 60 * 8;
 

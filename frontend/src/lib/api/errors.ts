@@ -67,3 +67,12 @@ export async function toApiError(res: Response): Promise<ApiError> {
 export function networkError(): ApiError {
   return new ApiError(0, defaultMessage(0));
 }
+
+/** First validation message for a field, ignoring the API's letter case ("NewPassword" vs "newPassword"). */
+export function fieldError(error: unknown, field: string): string | undefined {
+  if (!(error instanceof ApiError)) return undefined;
+  const key = Object.keys(error.fieldErrors).find(
+    (k) => k.toLowerCase() === field.toLowerCase(),
+  );
+  return key ? error.fieldErrors[key]?.[0] : undefined;
+}
