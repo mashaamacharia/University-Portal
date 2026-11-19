@@ -50,6 +50,7 @@ export type AgingBucket = Strict<S["AgingBucketDto"]>;
 export type OfficerInvoice = Strict<S["OfficerInvoiceDto"]>;
 export type OfficerInvoicePage = Strict<S["OfficerInvoiceDtoPagedResult"]>;
 export type OfficerInvoiceDetail = Strict<S["OfficerInvoiceDetailDto"]>;
+export type StudentLookupResult = Strict<S["StudentLookupDto"]>;
 export type OfficerPayment = Strict<S["OfficerPaymentDto"]>;
 export type OfficerPaymentPage = Strict<S["OfficerPaymentDtoPagedResult"]>;
 export type OutstandingBalance = Strict<S["OutstandingBalanceDto"]>;
@@ -60,6 +61,7 @@ export type OutstandingBalancePage = Strict<
 export type CreateInvoiceRequest = S["CreateInvoiceRequest"];
 export type CreateInvoiceLineRequest = S["CreateInvoiceLineRequest"];
 export type OfficerInvoicesQuery = QueryOf<"/api/officer/finance/invoices">;
+export type StudentLookupQuery = QueryOf<"/api/officer/finance/students">;
 export type OfficerPaymentsQuery = QueryOf<"/api/officer/finance/payments">;
 export type OutstandingBalancesQuery =
   QueryOf<"/api/officer/finance/outstanding-balances">;

@@ -21,6 +21,12 @@ public class OfficerFinanceController : ControllerBase
         _workflow = workflow;
     }
 
+    [HttpGet("students")]
+    public async Task<ActionResult<IReadOnlyList<StudentLookupDto>>> SearchStudents(
+        [FromQuery] StudentLookupQuery query,
+        CancellationToken ct) =>
+        Ok(await _finance.SearchStudentsAsync(query, ct));
+
     [HttpGet("invoices")]
     public async Task<ActionResult<PagedResult<OfficerInvoiceDto>>> GetInvoices(
         [FromQuery] OfficerInvoiceQuery query,

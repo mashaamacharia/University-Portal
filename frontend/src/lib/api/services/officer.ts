@@ -9,12 +9,17 @@ import type {
   OfficerPaymentsQuery,
   OutstandingBalancePage,
   OutstandingBalancesQuery,
+  StudentLookupQuery,
+  StudentLookupResult,
 } from "@/types";
 
 const base = "/api/officer/finance";
 
 export const officerApi = {
   dashboard: () => apiFetch<OfficerDashboard>(`${base}/dashboard`),
+
+  searchStudents: (query: StudentLookupQuery, signal?: AbortSignal) =>
+    apiFetch<StudentLookupResult[]>(`${base}/students`, { query, signal }),
 
   outstandingBalances: (query?: OutstandingBalancesQuery) =>
     apiFetch<OutstandingBalancePage>(`${base}/outstanding-balances`, { query }),

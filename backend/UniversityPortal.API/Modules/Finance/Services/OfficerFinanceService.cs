@@ -32,6 +32,21 @@ public class OfficerFinanceService : IOfficerFinanceService
             throw new ForbiddenException("Caller is not in the FinanceOfficer role");
     }
 
+    public async Task<IReadOnlyList<StudentLookupDto>> SearchStudentsAsync(
+        StudentLookupQuery query,
+        CancellationToken ct)
+    {
+        RequireOfficer();
+
+        var customers = await _bc.SearchCustomersAsync(query.Search.Trim(), ct: ct);
+        return customers
+            .Select(customer => new StudentLookupDto(
+                customer.Number,
+                customer.DisplayName,
+                customer.Email))
+            .ToList();
+    }
+
     public async Task<PagedResult<OfficerInvoiceDto>> GetInvoicesAsync(OfficerInvoiceQuery query, CancellationToken ct)
     {
         RequireOfficer();

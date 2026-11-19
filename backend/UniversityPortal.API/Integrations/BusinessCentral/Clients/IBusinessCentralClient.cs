@@ -11,6 +11,11 @@ public interface IBusinessCentralClient
         int skip = 0,
         CancellationToken ct = default);
 
+    Task<IReadOnlyList<BcCustomerDto>> SearchCustomersAsync(
+        string search,
+        int top = 10,
+        CancellationToken ct = default);
+
     Task<BcCustomerDto?> GetCustomerByNumberAsync(string customerNumber, CancellationToken ct = default);
 
     Task<BcItemDto?> GetItemByNumberAsync(string number, CancellationToken ct = default);

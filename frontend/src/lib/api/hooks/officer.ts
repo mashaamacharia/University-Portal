@@ -1,6 +1,10 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { officerApi } from "@/lib/api";
-import type { OfficerPaymentsQuery, OutstandingBalancesQuery } from "@/types";
+import type {
+  OfficerPaymentsQuery,
+  OutstandingBalancesQuery,
+  StudentLookupQuery,
+} from "@/types";
 
 export const officerKeys = {
   all: ["officer"] as const,
@@ -9,6 +13,8 @@ export const officerKeys = {
     ["officer", "outstanding", query] as const,
   payments: (query?: OfficerPaymentsQuery) =>
     ["officer", "payments", query] as const,
+  studentLookup: (query: StudentLookupQuery) =>
+    ["officer", "students", query] as const,
 };
 
 export function useOfficerDashboard() {
@@ -31,5 +37,15 @@ export function useOfficerPayments(query: OfficerPaymentsQuery) {
     queryKey: officerKeys.payments(query),
     queryFn: () => officerApi.payments(query),
     placeholderData: keepPreviousData,
+  });
+}
+
+export function useStudentLookup(search: string) {
+  const query = { Search: search.trim() };
+  return useQuery({
+    queryKey: officerKeys.studentLookup(query),
+    queryFn: ({ signal }) => officerApi.searchStudents(query, signal),
+    enabled: query.Search.length >= 2,
+    staleTime: 30_000,
   });
 }
