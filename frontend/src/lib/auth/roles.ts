@@ -32,3 +32,13 @@ export function safeNext(next?: string | null): string | null {
   if (next.startsWith("/login") || next.startsWith("/api")) return null;
   return next;
 }
+
+const ROLE_LABELS: Record<PortalRole, string> = {
+  Administrator: "Administrator",
+  FinanceOfficer: "Finance officer",
+  Student: "Student",
+};
+
+export function roleLabel(role: string): string {
+  return ROLE_LABELS[role as PortalRole] ?? role;
+}
