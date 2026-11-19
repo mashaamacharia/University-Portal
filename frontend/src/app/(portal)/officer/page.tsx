@@ -1,7 +1,7 @@
-import { Placeholder } from "@/components/dev/placeholder";
+import { OfficerDashboard } from "@/components/officer/dashboard";
 
-export const metadata = { title: "Finance dashboard" };
+export const metadata = { title: "Finance overview" };
 
 export default function OfficerHome() {
-  return <Placeholder title="Finance dashboard" next="F6" />;
+  return <OfficerDashboard />;
 }

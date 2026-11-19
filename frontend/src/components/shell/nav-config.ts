@@ -35,12 +35,11 @@ const NAV: NavGroup[] = [
     items: [
       { label: "Dashboard", href: "/officer", icon: LayoutDashboard, exact: true },
       { label: "Invoices", href: "/officer/invoices", icon: FileText, soon: true },
-      { label: "Payments", href: "/officer/payments", icon: Banknote, soon: true },
+      { label: "Payments", href: "/officer/payments", icon: Banknote },
       {
         label: "Outstanding balances",
         href: "/officer/outstanding",
         icon: HandCoins,
-        soon: true,
       },
     ],
   },
