@@ -21,7 +21,11 @@ const LABELS: Record<string, string> = {
 
 /** Segments with no page of their own: shown as text, not links. */
 const NO_PAGE = new Set(["account"]);
-const ROOTS = new Set(["student", "officer", "admin"]);
+const ROOT_LABELS: Record<string, string> = {
+  student: "Dashboard",
+  officer: "Dashboard",
+  admin: "Users",
+};
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function labelFor(segment: string): string {
@@ -34,10 +38,10 @@ export function Breadcrumbs({ className }: { className?: string }) {
   const segments = usePathname().split("/").filter(Boolean);
   if (segments.length === 0) return null;
 
-  // "/student" alone is the dashboard.
+  // "/student" alone is the dashboard; "/admin" alone is the users page.
   const crumbs =
-    segments.length === 1 && ROOTS.has(segments[0])
-      ? [{ label: "Dashboard", href: `/${segments[0]}` }]
+    segments.length === 1 && ROOT_LABELS[segments[0]]
+      ? [{ label: ROOT_LABELS[segments[0]], href: `/${segments[0]}` }]
       : segments.map((segment, i) => ({
           label: labelFor(segment),
           href: `/${segments.slice(0, i + 1).join("/")}`,
