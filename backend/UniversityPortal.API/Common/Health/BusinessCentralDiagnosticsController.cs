@@ -4,6 +4,7 @@ using UniversityPortal.API.Integrations.BusinessCentral.Clients;
 namespace UniversityPortal.API.Common.Health;
 
 [ApiController]
+[ApiExplorerSettings(IgnoreApi = true)]
 [Route("api/diagnostics/business-central")]
 public class BusinessCentralDiagnosticsController : ControllerBase
 {
