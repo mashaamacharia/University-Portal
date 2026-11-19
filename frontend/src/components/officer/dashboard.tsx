@@ -85,11 +85,13 @@ export function OfficerDashboard() {
             value={formatMoney(data!.totalOutstanding)}
             hint="Unpaid across all students"
             icon={Wallet}
+            href="/officer/outstanding"
           />
           <StatCard
             label="Students with a balance"
             value={formatNumber(data!.studentsWithBalance)}
             icon={Users}
+            href="/officer/outstanding"
             tone="navy"
           />
           <StatCard
@@ -97,6 +99,7 @@ export function OfficerDashboard() {
             value={formatNumber(data!.studentsWithOverdue)}
             hint={data!.studentsWithOverdue > 0 ? "Past their due date" : "Nobody is overdue"}
             icon={AlertTriangle}
+            href="/officer/outstanding?overdue=1"
             tone={data!.studentsWithOverdue > 0 ? "red" : "green"}
           />
           <StatCard
@@ -104,6 +107,7 @@ export function OfficerDashboard() {
             value={formatNumber(data!.draftInvoices + data!.invoicesInReview)}
             hint={`${formatNumber(data!.draftInvoices)} drafts · ${formatNumber(data!.invoicesInReview)} in review`}
             icon={FilePenLine}
+            href="/officer/invoices?status=Draft"
             tone="amber"
           />
         </div>

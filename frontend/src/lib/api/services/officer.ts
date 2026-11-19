@@ -9,17 +9,13 @@ import type {
   OfficerPaymentsQuery,
   OutstandingBalancePage,
   OutstandingBalancesQuery,
-  StudentLookupQuery,
-  StudentLookupResult,
+  StudentLookup,
 } from "@/types";
 
 const base = "/api/officer/finance";
 
 export const officerApi = {
   dashboard: () => apiFetch<OfficerDashboard>(`${base}/dashboard`),
-
-  searchStudents: (query: StudentLookupQuery, signal?: AbortSignal) =>
-    apiFetch<StudentLookupResult[]>(`${base}/students`, { query, signal }),
 
   outstandingBalances: (query?: OutstandingBalancesQuery) =>
     apiFetch<OutstandingBalancePage>(`${base}/outstanding-balances`, { query }),
@@ -30,8 +26,14 @@ export const officerApi = {
   invoices: (query?: OfficerInvoicesQuery) =>
     apiFetch<OfficerInvoicePage>(`${base}/invoices`, { query }),
 
+  /** Student picker for the create-invoice form. */
+  searchStudents: (search: string) =>
+    apiFetch<StudentLookup[]>(`${base}/students`, { query: { Search: search } }),
+
   invoice: (bcInvoiceId: string) =>
-    apiFetch<OfficerInvoiceDetail>(`${base}/invoices/${bcInvoiceId}`),
+    apiFetch<OfficerInvoiceDetail>(
+      `${base}/invoices/${encodeURIComponent(bcInvoiceId)}`,
+    ),
 
   /**
    * Generate one idempotencyKey per form submission (crypto.randomUUID()) and

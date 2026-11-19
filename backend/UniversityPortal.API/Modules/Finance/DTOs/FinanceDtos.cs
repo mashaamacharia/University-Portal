@@ -182,6 +182,7 @@ public record OutstandingBalanceDto(
     decimal OverdueAmount);
 
 public record OfficerInvoiceDto(
+    Guid BcInvoiceId,
     string InvoiceNumber,
     string StudentNumber,
     string StudentName,

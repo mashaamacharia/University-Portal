@@ -1037,6 +1037,8 @@ export interface components {
             email?: string | null;
         };
         OfficerInvoiceDto: {
+            /** Format: uuid */
+            bcInvoiceId?: string;
             invoiceNumber?: string | null;
             studentNumber?: string | null;
             studentName?: string | null;

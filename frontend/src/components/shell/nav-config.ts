@@ -16,8 +16,6 @@ export type NavItem = {
   icon: LucideIcon;
   /** Highlight only on this exact path (dashboards). Others also match sub-pages. */
   exact?: boolean;
-  /** Page not built yet: shown greyed out with a "Soon" tag. Delete this flag when the module lands. */
-  soon?: boolean;
 };
 
 export type NavGroup = { role: PortalRole; label: string; items: NavItem[] };
@@ -34,7 +32,7 @@ const NAV: NavGroup[] = [
     label: "Finance office",
     items: [
       { label: "Dashboard", href: "/officer", icon: LayoutDashboard, exact: true },
-      { label: "Invoices", href: "/officer/invoices", icon: FileText, soon: true },
+      { label: "Invoices", href: "/officer/invoices", icon: FileText },
       { label: "Payments", href: "/officer/payments", icon: Banknote },
       {
         label: "Outstanding balances",

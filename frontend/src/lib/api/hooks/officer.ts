@@ -1,9 +1,16 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { officerApi } from "@/lib/api";
 import type {
+  CreateInvoiceRequest,
+  OfficerInvoiceDetail,
+  OfficerInvoicesQuery,
   OfficerPaymentsQuery,
   OutstandingBalancesQuery,
-  StudentLookupQuery,
 } from "@/types";
 
 export const officerKeys = {
@@ -13,8 +20,10 @@ export const officerKeys = {
     ["officer", "outstanding", query] as const,
   payments: (query?: OfficerPaymentsQuery) =>
     ["officer", "payments", query] as const,
-  studentLookup: (query: StudentLookupQuery) =>
-    ["officer", "students", query] as const,
+  invoices: (query?: OfficerInvoicesQuery) =>
+    ["officer", "invoices", query] as const,
+  invoice: (id: string) => ["officer", "invoice", id] as const,
+  students: (search: string) => ["officer", "students", search] as const,
 };
 
 export function useOfficerDashboard() {
@@ -40,12 +49,65 @@ export function useOfficerPayments(query: OfficerPaymentsQuery) {
   });
 }
 
-export function useStudentLookup(search: string) {
-  const query = { Search: search.trim() };
+export function useOfficerInvoices(query: OfficerInvoicesQuery) {
   return useQuery({
-    queryKey: officerKeys.studentLookup(query),
-    queryFn: ({ signal }) => officerApi.searchStudents(query, signal),
-    enabled: query.Search.length >= 2,
-    staleTime: 30_000,
+    queryKey: officerKeys.invoices(query),
+    queryFn: () => officerApi.invoices(query),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useOfficerInvoice(id: string) {
+  return useQuery({
+    queryKey: officerKeys.invoice(id),
+    queryFn: () => officerApi.invoice(id),
+  });
+}
+
+/** Student picker: only searches once there are at least 2 characters. */
+export function useStudentSearch(search: string) {
+  return useQuery({
+    queryKey: officerKeys.students(search),
+    queryFn: () => officerApi.searchStudents(search),
+    enabled: search.length >= 2,
+    staleTime: 60_000,
+  });
+}
+
+export function useCreateInvoice() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    OfficerInvoiceDetail,
+    Error,
+    { body: CreateInvoiceRequest; idempotencyKey: string }
+  >({
+    mutationFn: ({ body, idempotencyKey }) =>
+      officerApi.createInvoice(body, idempotencyKey),
+    onSuccess: (invoice) => {
+      queryClient.setQueryData(officerKeys.invoice(invoice.bcInvoiceId), invoice);
+      queryClient.invalidateQueries({ queryKey: officerKeys.all });
+    },
+  });
+}
+
+export function usePostInvoice() {
+  const queryClient = useQueryClient();
+  return useMutation<OfficerInvoiceDetail, Error, string>({
+    mutationFn: (id) => officerApi.postInvoice(id),
+    onSuccess: (invoice, id) => {
+      queryClient.setQueryData(officerKeys.invoice(id), invoice);
+      queryClient.invalidateQueries({ queryKey: officerKeys.all });
+    },
+  });
+}
+
+export function useDiscardInvoice() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, string>({
+    mutationFn: (id) => officerApi.discardInvoice(id),
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: officerKeys.invoice(id) });
+      queryClient.invalidateQueries({ queryKey: officerKeys.all });
+    },
   });
 }

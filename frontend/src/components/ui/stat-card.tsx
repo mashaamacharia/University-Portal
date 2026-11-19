@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -16,6 +17,8 @@ type StatCardProps = {
   hint?: string;
   icon?: LucideIcon;
   tone?: Tone;
+  /** Makes the whole card a link. */
+  href?: string;
   className?: string;
 };
 
@@ -25,15 +28,17 @@ export function StatCard({
   hint,
   icon: Icon,
   tone = "navy",
+  href,
   className,
 }: StatCardProps) {
-  return (
-    <div
-      className={cn(
-        "flex items-start justify-between gap-3 rounded-xl border border-line bg-white p-5 shadow-card",
-        className,
-      )}
-    >
+  const classes = cn(
+    "flex items-start justify-between gap-3 rounded-xl border border-line bg-white p-5 shadow-card",
+    href && "transition-colors hover:border-navy-300",
+    className,
+  );
+
+  const body = (
+    <>
       <div className="min-w-0">
         <p className="text-sm text-muted">{label}</p>
         <p className="money mt-1 truncate font-serif text-3xl font-semibold text-navy-900">
@@ -51,6 +56,14 @@ export function StatCard({
           <Icon className="size-5" aria-hidden />
         </span>
       )}
-    </div>
+    </>
+  );
+
+  return href ? (
+    <Link href={href} className={classes}>
+      {body}
+    </Link>
+  ) : (
+    <div className={classes}>{body}</div>
   );
 }
