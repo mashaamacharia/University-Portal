@@ -1,5 +1,5 @@
-import { OfficerInvoicesView, INVOICE_STATUSES } from "@/components/officer/invoices-view";
-import type { InvoiceStatus } from "@/types";
+import { OfficerInvoicesView } from "@/components/officer/invoices-view";
+import { isInvoiceStatus } from "@/lib/invoice-status";
 
 export const metadata = { title: "Invoices" };
 
@@ -9,6 +9,6 @@ export default async function OfficerInvoicesPage({
   searchParams: Promise<{ status?: string }>;
 }) {
   const { status } = await searchParams;
-  const initialStatus = INVOICE_STATUSES.find((s) => s === status) as InvoiceStatus | undefined;
+  const initialStatus = isInvoiceStatus(status) ? status : undefined;
   return <OfficerInvoicesView initialStatus={initialStatus} />;
 }

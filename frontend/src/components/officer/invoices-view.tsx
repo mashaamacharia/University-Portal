@@ -12,22 +12,14 @@ import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOfficerInvoices } from "@/lib/api/hooks/officer";
-import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { INVOICE_STATUSES } from "@/lib/invoice-status";
 import { list } from "@/lib/utils";
-import type { InvoiceStatus } from "@/types";
+import type { InvoiceStatus, StudentLookup } from "@/types";
 import { OfficerInvoiceTable } from "./officer-invoice-table";
+import { StudentSearch } from "./student-search";
 
 const PAGE_SIZE = 20;
 type StatusFilter = InvoiceStatus | "all";
-
-export const INVOICE_STATUSES: InvoiceStatus[] = [
-  "Draft",
-  "InReview",
-  "Open",
-  "Paid",
-  "Corrective",
-  "Canceled",
-];
 
 const STATUS_LABELS: Record<InvoiceStatus, string> = {
   Draft: "Drafts",
@@ -40,23 +32,21 @@ const STATUS_LABELS: Record<InvoiceStatus, string> = {
 
 export function OfficerInvoicesView({ initialStatus }: { initialStatus?: InvoiceStatus }) {
   const [status, setStatus] = useState<StatusFilter>(initialStatus ?? "all");
-  const [student, setStudent] = useState("");
+  const [student, setStudent] = useState<StudentLookup | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
 
-  const debouncedStudent = useDebouncedValue(student).trim();
-
   const query = useOfficerInvoices({
     Status: status === "all" ? undefined : status,
-    CustomerNumber: debouncedStudent || undefined,
+    CustomerNumber: student?.studentNumber ?? undefined,
     From: from || undefined,
     To: to || undefined,
     Page: page,
     PageSize: PAGE_SIZE,
   });
 
-  const filtered = status !== "all" || student !== "" || from !== "" || to !== "";
+  const filtered = status !== "all" || student !== null || from !== "" || to !== "";
 
   return (
     <>
@@ -86,13 +76,11 @@ export function OfficerInvoicesView({ initialStatus }: { initialStatus?: Invoice
             ]}
           />
           <div className="flex flex-wrap items-end gap-4">
-            <div className="w-56">
-              <Input
-                label="Student number"
-                placeholder="e.g. SC211/0001/2022"
+            <div className="w-72">
+              <StudentSearch
                 value={student}
-                onChange={(e) => {
-                  setStudent(e.target.value);
+                onChange={(selected) => {
+                  setStudent(selected);
                   setPage(1);
                 }}
               />
@@ -126,7 +114,7 @@ export function OfficerInvoicesView({ initialStatus }: { initialStatus?: Invoice
                 variant="ghost"
                 onClick={() => {
                   setStatus("all");
-                  setStudent("");
+                  setStudent(null);
                   setFrom("");
                   setTo("");
                   setPage(1);

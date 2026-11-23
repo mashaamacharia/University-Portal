@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import { X } from "lucide-react";
 
 type ModalProps = {
@@ -22,6 +22,8 @@ export function Modal({
   footer,
 }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -38,13 +40,19 @@ export function Modal({
         // A click on the dialog box itself (not its content) is the backdrop.
         if (e.target === ref.current) onClose();
       }}
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
       className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-2xl bg-white p-0 text-ink shadow-pop backdrop:bg-navy-950/50"
     >
       <div className="flex items-start justify-between gap-4 px-6 pt-5">
         <div>
-          <h2 className="text-lg font-semibold text-navy-900">{title}</h2>
+          <h2 id={titleId} className="text-lg font-semibold text-navy-900">
+            {title}
+          </h2>
           {description && (
-            <p className="mt-1 text-sm text-muted">{description}</p>
+            <p id={descriptionId} className="mt-1 text-sm text-muted">
+              {description}
+            </p>
           )}
         </div>
         <button

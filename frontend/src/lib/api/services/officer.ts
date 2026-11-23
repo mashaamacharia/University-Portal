@@ -26,7 +26,7 @@ export const officerApi = {
   invoices: (query?: OfficerInvoicesQuery) =>
     apiFetch<OfficerInvoicePage>(`${base}/invoices`, { query }),
 
-  /** Student picker for the create-invoice form. */
+  /** Student search shared by invoice creation and finance list filters. */
   searchStudents: (search: string) =>
     apiFetch<StudentLookup[]>(`${base}/students`, { query: { Search: search } }),
 

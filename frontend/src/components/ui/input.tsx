@@ -38,7 +38,7 @@ export function Input({
           aria-describedby={describedBy}
           className={cn(
             "h-10 w-full rounded-lg border bg-white px-3 text-sm text-ink",
-            "placeholder:text-navy-300 disabled:bg-navy-50 disabled:text-muted",
+            "placeholder:text-navy-400 disabled:bg-navy-50 disabled:text-muted",
             error
               ? "border-danger-600"
               : "border-navy-200 hover:border-navy-300",

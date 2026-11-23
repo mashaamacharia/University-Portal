@@ -6,7 +6,7 @@ import { SESSION_COOKIE } from "@/lib/auth/constants";
  * the real verification (token valid, correct role) happens in the server
  * layouts via getCurrentUser() / requireRole().
  */
-const PUBLIC_PATHS = ["/login", "/design"]; // /design is the F1 preview: remove when done
+const PUBLIC_PATHS = ["/login"];
 
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
