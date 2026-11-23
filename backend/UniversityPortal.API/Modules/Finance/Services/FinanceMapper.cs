@@ -71,6 +71,7 @@ internal static class FinanceMapper
         var posted = status is InvoiceStatus.Open or InvoiceStatus.Paid or InvoiceStatus.Corrective;
 
         return new OfficerInvoiceDto(
+            BcInvoiceId: bc.Id,
             InvoiceNumber: bc.Number,
             StudentNumber: bc.CustomerNumber,
             StudentName: bc.CustomerName,

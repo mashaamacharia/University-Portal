@@ -31,24 +31,6 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             <ul className="space-y-0.5">
               {group.items.map((item) => {
                 const Icon = item.icon;
-
-                if (item.soon) {
-                  return (
-                    <li key={item.href}>
-                      <span
-                        aria-disabled="true"
-                        className="flex cursor-default items-center gap-3 rounded-lg px-3 py-2 text-sm text-navy-400"
-                      >
-                        <Icon className="size-[18px]" aria-hidden />
-                        <span className="flex-1">{item.label}</span>
-                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-navy-200">
-                          Soon
-                        </span>
-                      </span>
-                    </li>
-                  );
-                }
-
                 const active = isActive(item, pathname);
                 return (
                   <li key={item.href}>

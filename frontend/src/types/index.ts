@@ -47,10 +47,15 @@ export type StudentPaymentsQuery = QueryOf<"/api/student/finance/payments">;
 // ---- Officer finance -------------------------------------------------------
 export type OfficerDashboard = Strict<S["OfficerDashboardDto"]>;
 export type AgingBucket = Strict<S["AgingBucketDto"]>;
+/**
+ * The list DTO has no bcInvoiceId yet, but the detail, post and delete endpoints
+ * need it. Add it to OfficerInvoiceDto on the backend; this intersection keeps the
+ * frontend compiling before and after that change.
+ */
 export type OfficerInvoice = Strict<S["OfficerInvoiceDto"]>;
 export type OfficerInvoicePage = Strict<S["OfficerInvoiceDtoPagedResult"]>;
+export type StudentLookup = Strict<S["StudentLookupDto"]>;
 export type OfficerInvoiceDetail = Strict<S["OfficerInvoiceDetailDto"]>;
-export type StudentLookupResult = Strict<S["StudentLookupDto"]>;
 export type OfficerPayment = Strict<S["OfficerPaymentDto"]>;
 export type OfficerPaymentPage = Strict<S["OfficerPaymentDtoPagedResult"]>;
 export type OutstandingBalance = Strict<S["OutstandingBalanceDto"]>;
@@ -61,7 +66,6 @@ export type OutstandingBalancePage = Strict<
 export type CreateInvoiceRequest = S["CreateInvoiceRequest"];
 export type CreateInvoiceLineRequest = S["CreateInvoiceLineRequest"];
 export type OfficerInvoicesQuery = QueryOf<"/api/officer/finance/invoices">;
-export type StudentLookupQuery = QueryOf<"/api/officer/finance/students">;
 export type OfficerPaymentsQuery = QueryOf<"/api/officer/finance/payments">;
 export type OutstandingBalancesQuery =
   QueryOf<"/api/officer/finance/outstanding-balances">;

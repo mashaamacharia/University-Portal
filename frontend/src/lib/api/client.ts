@@ -56,6 +56,8 @@ export async function apiFetch<T>(
     !window.location.pathname.startsWith("/login")
   ) {
     // Session expired: the proxy has already cleared the cookie.
+    // A full page load drops all cached client state.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.assign("/login?reason=expired");
   }
 

@@ -1,7 +1,7 @@
-import { Placeholder } from "@/components/dev/placeholder";
+import { AdminUsersView } from "@/components/admin/users-view";
 
-export const metadata = { title: "User administration" };
+export const metadata = { title: "Users" };
 
 export default function AdminHome() {
-  return <Placeholder title="User administration" next="F8" />;
+  return <AdminUsersView />;
 }

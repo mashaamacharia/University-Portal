@@ -57,11 +57,23 @@ public class BusinessCentralClient : IBusinessCentralClient
         ValidateCustomerSearch(search, top);
 
         var safeSearch = search.Trim().Replace("'", "''", StringComparison.Ordinal);
-        var filter = Uri.EscapeDataString(
-            $"startswith(number, '{safeSearch}') or contains(displayName, '{safeSearch}')");
-        var url = CompanyPath($"customers?$filter={filter}&$orderby=number asc&$top={top}");
-        var response = await GetAsync<BcListResponse<BcCustomerDto>>(url, ct);
-        return response?.Value ?? [];
+        var numberFilter = Uri.EscapeDataString($"startswith(number, '{safeSearch}')");
+        var nameFilter = Uri.EscapeDataString($"contains(displayName, '{safeSearch}')");
+        var numberUrl = CompanyPath(
+            $"customers?$filter={numberFilter}&$orderby=number asc&$top={top}");
+        var nameUrl = CompanyPath(
+            $"customers?$filter={nameFilter}&$orderby=number asc&$top={top}");
+
+        var numberSearch = GetAsync<BcListResponse<BcCustomerDto>>(numberUrl, ct);
+        var nameSearch = GetAsync<BcListResponse<BcCustomerDto>>(nameUrl, ct);
+        await Task.WhenAll(numberSearch, nameSearch);
+
+        return (numberSearch.Result?.Value ?? [])
+            .Concat(nameSearch.Result?.Value ?? [])
+            .DistinctBy(customer => customer.Number, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(customer => customer.Number, StringComparer.OrdinalIgnoreCase)
+            .Take(top)
+            .ToList();
     }
 
     public async Task<BcCustomerDto?> GetCustomerByNumberAsync(

@@ -18,7 +18,10 @@ export function Pagination({
   const to = Math.min(page * pageSize, totalCount);
 
   return (
-    <div className="flex items-center justify-between gap-3 border-t border-line px-5 py-3 text-sm">
+    <nav
+      aria-label="Pagination"
+      className="flex items-center justify-between gap-3 border-t border-line px-5 py-3 text-sm"
+    >
       <p className="money text-muted">
         Showing {from}&ndash;{to} of {totalCount}
       </p>
@@ -40,6 +43,6 @@ export function Pagination({
           Next
         </Button>
       </div>
-    </div>
+    </nav>
   );
 }

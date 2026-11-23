@@ -9,42 +9,39 @@ import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOfficerPayments } from "@/lib/api/hooks/officer";
-import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { list } from "@/lib/utils";
+import type { StudentLookup } from "@/types";
 import { OfficerPaymentTable } from "./officer-payment-table";
+import { StudentSearch } from "./student-search";
 
 const PAGE_SIZE = 20;
 
 export function OfficerPaymentsView() {
-  const [student, setStudent] = useState("");
+  const [student, setStudent] = useState<StudentLookup | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
 
-  const debouncedStudent = useDebouncedValue(student).trim();
-
   const query = useOfficerPayments({
-    CustomerNumber: debouncedStudent || undefined,
+    CustomerNumber: student?.studentNumber ?? undefined,
     From: from || undefined,
     To: to || undefined,
     Page: page,
     PageSize: PAGE_SIZE,
   });
 
-  const filtered = student !== "" || from !== "" || to !== "";
+  const filtered = student !== null || from !== "" || to !== "";
 
   return (
     <>
       <PageHeader title="Payments" description="Every payment recorded across all students." />
       <Card>
         <CardContent className="flex flex-wrap items-end gap-4 border-b border-line">
-          <div className="w-56">
-            <Input
-              label="Student number"
-              placeholder="e.g. SC211/0001/2022"
+          <div className="w-72">
+            <StudentSearch
               value={student}
-              onChange={(e) => {
-                setStudent(e.target.value);
+              onChange={(selected) => {
+                setStudent(selected);
                 setPage(1);
               }}
             />
@@ -77,7 +74,7 @@ export function OfficerPaymentsView() {
             <Button
               variant="ghost"
               onClick={() => {
-                setStudent("");
+                setStudent(null);
                 setFrom("");
                 setTo("");
                 setPage(1);

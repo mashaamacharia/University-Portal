@@ -1,6 +1,6 @@
 page 50100 "UP Customer Ledger Entries API"
 {
-    PageType = API;
+    PageType = API;     
     APIPublisher = 'techworks';
     APIGroup = 'universityPortal';
     APIVersion = 'v1.0';
