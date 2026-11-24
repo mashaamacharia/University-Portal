@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,12 +13,14 @@ import { useOfficerPayments } from "@/lib/api/hooks/officer";
 import { list } from "@/lib/utils";
 import type { StudentLookup } from "@/types";
 import { OfficerPaymentTable } from "./officer-payment-table";
+import { RecordPaymentDialog } from "./record-payment-dialog";
 import { StudentSearch } from "./student-search";
 
 const PAGE_SIZE = 20;
 
 export function OfficerPaymentsView() {
   const [student, setStudent] = useState<StudentLookup | null>(null);
+  const [recordOpen, setRecordOpen] = useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
@@ -34,7 +37,17 @@ export function OfficerPaymentsView() {
 
   return (
     <>
-      <PageHeader title="Payments" description="Every payment recorded across all students." />
+      <PageHeader
+        title="Payments"
+        description="Every payment recorded across all students."
+        actions={
+          <Button variant="accent" onClick={() => setRecordOpen(true)}>
+            <Plus className="size-4" aria-hidden />
+            Record payment
+          </Button>
+        }
+      />
+      <RecordPaymentDialog open={recordOpen} onClose={() => setRecordOpen(false)} />
       <Card>
         <CardContent className="flex flex-wrap items-end gap-4 border-b border-line">
           <div className="w-72">

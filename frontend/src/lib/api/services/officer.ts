@@ -9,6 +9,8 @@ import type {
   OfficerPaymentsQuery,
   OutstandingBalancePage,
   OutstandingBalancesQuery,
+  PaymentRequestResult,
+  RecordPaymentRequest,
   StudentLookup,
 } from "@/types";
 
@@ -23,6 +25,18 @@ export const officerApi = {
   payments: (query?: OfficerPaymentsQuery) =>
     apiFetch<OfficerPaymentPage>(`${base}/payments`, { query }),
 
+  recordPayment: (body: RecordPaymentRequest) =>
+    apiFetch<PaymentRequestResult>(`${base}/payments`, { method: "POST", body }),
+
+  paymentRequest: (id: string) =>
+    apiFetch<PaymentRequestResult>(`${base}/payment-requests/${encodeURIComponent(id)}`),
+
+  reconcilePayment: (id: string) =>
+    apiFetch<PaymentRequestResult>(
+      `${base}/payment-requests/${encodeURIComponent(id)}/reconcile`,
+      { method: "POST" },
+    ),
+
   invoices: (query?: OfficerInvoicesQuery) =>
     apiFetch<OfficerInvoicePage>(`${base}/invoices`, { query }),
 
@@ -36,7 +50,7 @@ export const officerApi = {
     ),
 
   /**
-   * Generate one idempotencyKey per form submission (crypto.randomUUID()) and
+   * Generate one 8-35 character idempotencyKey per distinct submission and
    * reuse it if the user retries the same submission.
    */
   createInvoice: (body: CreateInvoiceRequest, idempotencyKey: string) =>

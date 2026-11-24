@@ -102,7 +102,7 @@ export function InvoiceForm() {
 
     const fingerprint = JSON.stringify(body);
     if (!attempt.current || attempt.current.fingerprint !== fingerprint) {
-      attempt.current = { key: newId(), fingerprint };
+      attempt.current = { key: newId().replaceAll("-", ""), fingerprint };
     }
 
     create.mutate(

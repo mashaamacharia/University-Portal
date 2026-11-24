@@ -58,6 +58,27 @@ export type StudentLookup = Strict<S["StudentLookupDto"]>;
 export type OfficerInvoiceDetail = Strict<S["OfficerInvoiceDetailDto"]>;
 export type OfficerPayment = Strict<S["OfficerPaymentDto"]>;
 export type OfficerPaymentPage = Strict<S["OfficerPaymentDtoPagedResult"]>;
+export type PaymentRequestStatus = "Pending" | "Posted" | "Failed" | "Unknown";
+export type RecordPaymentRequest = {
+  requestId: string;
+  studentNumber: string;
+  invoiceNumber: string | null;
+  amount: number;
+  paymentDate: string;
+  method: string;
+  reference: string | null;
+};
+export type PaymentRequestResult = {
+  requestId: string;
+  status: PaymentRequestStatus;
+  receiptNumber: string | null;
+  studentNumber: string;
+  invoiceNumber: string | null;
+  amount: number;
+  paymentDate: string;
+  method: string;
+  message: string | null;
+};
 export type OutstandingBalance = Strict<S["OutstandingBalanceDto"]>;
 export type OutstandingBalancePage = Strict<
   S["OutstandingBalanceDtoPagedResult"]

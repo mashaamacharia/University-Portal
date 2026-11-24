@@ -103,7 +103,9 @@ These are proposed portal endpoints, not existing Business Central endpoints.
 | GET    | `/api/v1/finance/outstanding-balances` | List balances for authorized finance users |
 | POST   | `/api/v1/finance/invoices`             | Initiate invoice creation                  |
 | GET    | `/api/v1/finance/invoices/{id}`        | Retrieve invoice processing status         |
-| POST   | `/api/v1/finance/payments`             | Initiate a test payment workflow           |
+| POST   | `/api/officer/finance/payments`        | Record and post a finance-officer payment  |
+| GET    | `/api/officer/finance/payment-requests/{id}` | Retrieve a payment request outcome          |
+| POST   | `/api/officer/finance/payment-requests/{id}/reconcile` | Reconcile an uncertain payment post |
 | GET    | `/api/v1/health`                       | Check application health                   |
 
 The student endpoints derive the student's identity from the authenticated session. They must not rely solely on a client-supplied student ID.

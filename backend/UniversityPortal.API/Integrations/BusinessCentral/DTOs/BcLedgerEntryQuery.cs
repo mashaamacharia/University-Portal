@@ -6,4 +6,5 @@ public record BcLedgerEntryQuery(
     DateOnly? From,
     DateOnly? To,
     int Skip,
-    int Top);
+    int Top,
+    string? ExternalDocumentNumber = null);
