@@ -62,6 +62,21 @@ public interface IBusinessCentralClient
         BcLedgerEntryQuery query,
         CancellationToken ct = default);
 
+    Task<Guid> ResolvePaymentJournalIdAsync(string batchCode, CancellationToken ct = default);
+
+    Task<IReadOnlyList<BcPaymentLineDto>> GetPaymentJournalLinesAsync(
+        Guid batchId,
+        CancellationToken ct = default);
+
+    Task<BcPaymentLineDto> CreatePaymentLineAsync(
+        Guid batchId,
+        BcPaymentLineRequest line,
+        CancellationToken ct = default);
+
+    Task DeletePaymentLineAsync(Guid batchId, Guid lineId, CancellationToken ct = default);
+
+    Task PostJournalAsync(Guid batchId, CancellationToken ct = default);
+
     Task<IReadOnlyList<BcCustomerDto>> GetCustomersByNumbersAsync(
         IReadOnlyCollection<string> numbers,
         CancellationToken ct = default);

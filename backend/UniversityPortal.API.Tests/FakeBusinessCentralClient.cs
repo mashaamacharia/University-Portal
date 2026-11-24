@@ -46,10 +46,35 @@ public class FakeBusinessCentralClient : IBusinessCentralClient
     private readonly ConcurrentQueue<string> _queried = new();
     private readonly ConcurrentDictionary<Guid, BcSalesInvoiceDto> _createdInvoices = new();
     private readonly ConcurrentDictionary<Guid, IReadOnlyList<BcSalesInvoiceLineDto>> _createdInvoiceLines = new();
+    private readonly object _paymentLock = new();
+    private readonly List<BcPaymentLineDto> _paymentLines = [];
+    private readonly List<BcCustomerLedgerEntryDto> _paymentLedgerEntries = [];
+    private readonly Guid _paymentJournalId = Guid.NewGuid();
+    private int _paymentLedgerLookupFailures;
 
     public IReadOnlyCollection<string> CustomerNumbersQueried => _queried.ToArray();
 
     public int CreatedInvoiceCount => _createdInvoices.Count;
+
+    public int CreatedPaymentLineCount { get; private set; }
+
+    public int PostedPaymentCount
+    {
+        get
+        {
+            lock (_paymentLock)
+                return _paymentLedgerEntries.Count;
+        }
+    }
+
+    public int PendingPaymentLineCount
+    {
+        get
+        {
+            lock (_paymentLock)
+                return _paymentLines.Count;
+        }
+    }
 
     public Guid NonPortalInvoiceId => _invoices[0].Id;
 
@@ -63,7 +88,45 @@ public class FakeBusinessCentralClient : IBusinessCentralClient
 
     public bool SimulatePostRejection { get; set; }
 
-    public void Reset() => _queried.Clear();
+    public bool SimulatePaymentPostRejection { get; set; }
+
+    public bool SimulateUnknownPaymentOutcomeAfterPost { get; set; }
+
+    public bool SimulatePaymentLedgerLookupFailureAfterPost { get; set; }
+
+    public void AddUnrelatedPaymentJournalLine()
+    {
+        lock (_paymentLock)
+        {
+            _paymentLines.Add(new BcPaymentLineDto
+            {
+                Id = Guid.NewGuid(),
+                CustomerNumber = StudentA,
+                ExternalDocumentNumber = "EXTERNAL-ENTRY"
+            });
+        }
+    }
+
+    public void Reset()
+    {
+        _queried.Clear();
+        ResetPaymentState();
+    }
+
+    public void ResetPaymentState()
+    {
+        lock (_paymentLock)
+        {
+            _paymentLines.Clear();
+            _paymentLedgerEntries.Clear();
+            CreatedPaymentLineCount = 0;
+            _paymentLedgerLookupFailures = 0;
+        }
+
+        SimulatePaymentPostRejection = false;
+        SimulateUnknownPaymentOutcomeAfterPost = false;
+        SimulatePaymentLedgerLookupFailureAfterPost = false;
+    }
 
     private void Record(string? number)
     {
@@ -296,7 +359,142 @@ public class FakeBusinessCentralClient : IBusinessCentralClient
         CancellationToken ct = default)
     {
         Record(query.CustomerNumber);
-        return Task.FromResult(new BcPagedList<BcCustomerLedgerEntryDto>([], 0));
+        lock (_paymentLock)
+        {
+            if (_paymentLedgerLookupFailures > 0)
+            {
+                _paymentLedgerLookupFailures--;
+                throw new BcIntegrationException(
+                    BcFailureKind.Timeout,
+                    "Simulated temporary payment ledger lookup failure");
+            }
+
+            var matches = _paymentLedgerEntries
+                .Where(entry => query.CustomerNumber is null || entry.CustomerNumber == query.CustomerNumber)
+                .Where(entry => query.ExternalDocumentNumber is null ||
+                    entry.ExternalDocumentNumber == query.ExternalDocumentNumber)
+                .Where(entry => query.DocumentTypes is not { Count: > 0 } ||
+                    query.DocumentTypes.Contains(entry.DocumentType, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+            return Task.FromResult(new BcPagedList<BcCustomerLedgerEntryDto>(
+                matches.Skip(query.Skip).Take(query.Top).ToList(),
+                matches.Count));
+        }
+    }
+
+    public Task<Guid> ResolvePaymentJournalIdAsync(
+        string batchCode,
+        CancellationToken ct = default) =>
+        batchCode.Equals("GENERAL", StringComparison.OrdinalIgnoreCase)
+            ? Task.FromResult(_paymentJournalId)
+            : throw new InvalidOperationException($"Unknown payment journal batch '{batchCode}'.");
+
+    public Task<IReadOnlyList<BcPaymentLineDto>> GetPaymentJournalLinesAsync(
+        Guid batchId,
+        CancellationToken ct = default)
+    {
+        if (batchId != _paymentJournalId)
+            throw new BcIntegrationException(BcFailureKind.NotFound, "Payment journal not found.");
+        lock (_paymentLock)
+            return Task.FromResult<IReadOnlyList<BcPaymentLineDto>>(_paymentLines.ToList());
+    }
+
+    public Task<BcPaymentLineDto> CreatePaymentLineAsync(
+        Guid batchId,
+        BcPaymentLineRequest line,
+        CancellationToken ct = default)
+    {
+        if (batchId != _paymentJournalId)
+            throw new BcIntegrationException(BcFailureKind.NotFound, "Payment journal not found.");
+
+        lock (_paymentLock)
+        {
+            var paymentLine = new BcPaymentLineDto
+            {
+                Id = Guid.NewGuid(),
+                LineNumber = _paymentLines.Count + 1,
+                CustomerNumber = line.CustomerNumber,
+                PostingDate = line.PostingDate,
+                ExternalDocumentNumber = line.ExternalDocumentNumber,
+                Amount = -Math.Abs(line.ReceivedAmount),
+                AppliesToInvoiceNumber = line.AppliesToInvoiceNumber ?? string.Empty,
+                Description = line.Description
+            };
+            _paymentLines.Add(paymentLine);
+            CreatedPaymentLineCount++;
+            return Task.FromResult(paymentLine);
+        }
+    }
+
+    public Task DeletePaymentLineAsync(
+        Guid batchId,
+        Guid lineId,
+        CancellationToken ct = default)
+    {
+        if (batchId != _paymentJournalId)
+            throw new BcIntegrationException(BcFailureKind.NotFound, "Payment journal not found.");
+        lock (_paymentLock)
+            _paymentLines.RemoveAll(line => line.Id == lineId);
+        return Task.CompletedTask;
+    }
+
+    public Task PostJournalAsync(Guid batchId, CancellationToken ct = default)
+    {
+        if (batchId != _paymentJournalId)
+            throw new BcIntegrationException(BcFailureKind.NotFound, "Payment journal not found.");
+
+        if (SimulatePaymentPostRejection)
+        {
+            SimulatePaymentPostRejection = false;
+            throw new BcRejectedException("Posting date is not allowed.", "Application_Error", null);
+        }
+
+        lock (_paymentLock)
+        {
+            foreach (var line in _paymentLines)
+            {
+                var entry = new BcCustomerLedgerEntryDto
+                {
+                    EntryNumber = _paymentLedgerEntries.Count + 1,
+                    CustomerNumber = line.CustomerNumber,
+                    PostingDate = line.PostingDate,
+                    DocumentType = "Payment",
+                    DocumentNumber = $"PAY-{Guid.NewGuid():N}"[..16],
+                    ExternalDocumentNumber = line.ExternalDocumentNumber,
+                    Amount = line.Amount,
+                    Description = line.Description
+                };
+                _paymentLedgerEntries.Add(entry);
+
+                if (!string.IsNullOrEmpty(line.AppliesToInvoiceNumber))
+                {
+                    var invoice = _invoices.FirstOrDefault(candidate =>
+                        candidate.CustomerNumber == line.CustomerNumber &&
+                        candidate.Number == line.AppliesToInvoiceNumber);
+                    if (invoice is not null)
+                    {
+                        invoice.RemainingAmount = Math.Max(0, invoice.RemainingAmount - Math.Abs(line.Amount));
+                        if (invoice.RemainingAmount == 0)
+                            invoice.Status = "Paid";
+                    }
+                }
+            }
+            _paymentLines.Clear();
+        }
+
+        if (SimulateUnknownPaymentOutcomeAfterPost)
+        {
+            SimulateUnknownPaymentOutcomeAfterPost = false;
+            if (SimulatePaymentLedgerLookupFailureAfterPost)
+            {
+                SimulatePaymentLedgerLookupFailureAfterPost = false;
+                lock (_paymentLock)
+                    _paymentLedgerLookupFailures = 1;
+            }
+            throw new BcIntegrationException(BcFailureKind.Timeout, "Simulated uncertain payment post outcome");
+        }
+
+        return Task.CompletedTask;
     }
 
     public Task<IReadOnlyList<BcCompanyDto>> GetCompaniesAsync(CancellationToken ct = default) =>

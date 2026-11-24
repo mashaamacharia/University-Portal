@@ -12,6 +12,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
 {
     public DbSet<InvoiceRequest> InvoiceRequests => Set<InvoiceRequest>();
 
+    public DbSet<PaymentRequest> PaymentRequests => Set<PaymentRequest>();
+
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
 
     protected override void OnModelCreating(ModelBuilder builder)

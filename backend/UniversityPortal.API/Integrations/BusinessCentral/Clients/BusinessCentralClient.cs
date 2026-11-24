@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using UniversityPortal.API.Integrations.BusinessCentral.Configuration;
@@ -14,6 +15,11 @@ namespace UniversityPortal.API.Integrations.BusinessCentral.Clients;
 
 public class BusinessCentralClient : IBusinessCentralClient
 {
+    private static readonly JsonSerializerOptions PaymentWriteJson = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     private static readonly string[] PostedStatuses = { "Open", "Paid", "Corrective" };
     private static readonly HashSet<string> PostedStatusSet = new(PostedStatuses, StringComparer.OrdinalIgnoreCase);
 
@@ -193,6 +199,89 @@ public class BusinessCentralClient : IBusinessCentralClient
         await SendWriteAsync<object>(message, ct);
     }
 
+    public async Task<Guid> ResolvePaymentJournalIdAsync(
+        string batchCode,
+        CancellationToken ct = default)
+    {
+        var safeBatchCode = batchCode.Replace("'", "''", StringComparison.Ordinal);
+        var filter = Uri.EscapeDataString($"code eq '{safeBatchCode}'");
+        var response = await GetAsync<BcListResponse<BcJournalDto>>(
+            CompanyPath($"customerPaymentJournals?$filter={filter}&$top=2"),
+            ct);
+        var journals = response?.Value ?? [];
+
+        if (journals.Count > 1)
+            throw new InvalidOperationException(
+                $"Payment journal batch code '{batchCode}' is ambiguous in Business Central.");
+
+        if (journals.Count == 0 || journals[0].Id == Guid.Empty)
+            throw new InvalidOperationException(
+                $"Payment journal batch '{batchCode}' was not found in Business Central. " +
+                "Check Payments:MethodBatches.");
+
+        return journals[0].Id;
+    }
+
+    public async Task<IReadOnlyList<BcPaymentLineDto>> GetPaymentJournalLinesAsync(
+        Guid batchId,
+        CancellationToken ct = default)
+    {
+        var response = await GetAsync<BcListResponse<BcPaymentLineDto>>(
+            CompanyPath($"customerPaymentJournals({batchId})/customerPayments"),
+            ct);
+        return response?.Value ?? [];
+    }
+
+    public async Task<BcPaymentLineDto> CreatePaymentLineAsync(
+        Guid batchId,
+        BcPaymentLineRequest line,
+        CancellationToken ct = default)
+    {
+        var body = new
+        {
+            customerNumber = line.CustomerNumber,
+            postingDate = line.PostingDate,
+            amount = -Math.Abs(line.ReceivedAmount),
+            appliesToInvoiceNumber = line.AppliesToInvoiceNumber,
+            externalDocumentNumber = line.ExternalDocumentNumber,
+            description = line.Description
+        };
+        using var message = new HttpRequestMessage(
+            HttpMethod.Post,
+            CompanyPath($"customerPaymentJournals({batchId})/customerPayments"))
+        {
+            Content = JsonContent.Create(body, options: PaymentWriteJson)
+        };
+
+        return await SendWriteAsync<BcPaymentLineDto>(message, ct)
+            ?? throw new BcIntegrationException(
+                BcFailureKind.InvalidResponse,
+                "BC returned no body for the created payment line");
+    }
+
+    public async Task DeletePaymentLineAsync(
+        Guid batchId,
+        Guid lineId,
+        CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(
+            HttpMethod.Delete,
+            CompanyPath($"customerPaymentJournals({batchId})/customerPayments({lineId})"));
+        message.Headers.TryAddWithoutValidation("If-Match", "*");
+        await SendWriteAsync<object>(message, ct);
+    }
+
+    public async Task PostJournalAsync(Guid batchId, CancellationToken ct = default)
+    {
+        using var message = new HttpRequestMessage(
+            HttpMethod.Post,
+            CompanyPath($"journals({batchId})/Microsoft.NAV.post"))
+        {
+            Content = JsonContent.Create(new { })
+        };
+        await SendWriteAsync<object>(message, ct);
+    }
+
     public async Task DeleteDraftSalesInvoiceAsync(Guid invoiceId, CancellationToken ct = default)
     {
         using var message = new HttpRequestMessage(
@@ -331,6 +420,10 @@ public class BusinessCentralClient : IBusinessCentralClient
 
         if (q.To is { } to)
             clauses.Add($"postingDate le {to:yyyy-MM-dd}");
+
+        if (!string.IsNullOrWhiteSpace(q.ExternalDocumentNumber))
+            clauses.Add(
+                $"externalDocumentNumber eq '{q.ExternalDocumentNumber.Replace("'", "''", StringComparison.Ordinal)}'");
 
         var parts = new List<string>
         {

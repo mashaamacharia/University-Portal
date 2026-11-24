@@ -18,6 +18,7 @@ public class AccessRuleTests : IClassFixture<PortalApiFactory>
     [InlineData("/api/student/finance/statement")]
     [InlineData("/api/officer/finance/invoices")]
     [InlineData("/api/officer/finance/students?search=Student")]
+    [InlineData("/api/officer/finance/payment-requests/00000000-0000-0000-0000-000000000001")]
     [InlineData("/api/admin/users")]
     [InlineData("/api/auth/me")]
     public async Task Protected_endpoints_reject_anonymous_callers(string path)
@@ -37,14 +38,17 @@ public class AccessRuleTests : IClassFixture<PortalApiFactory>
     [InlineData("Student", "/api/student/finance/statement", 200)]
     [InlineData("Student", "/api/officer/finance/invoices", 403)]
     [InlineData("Student", "/api/officer/finance/students?search=Student", 403)]
+    [InlineData("Student", "/api/officer/finance/payment-requests/00000000-0000-0000-0000-000000000001", 403)]
     [InlineData("Student", "/api/admin/users", 403)]
     [InlineData("FinanceOfficer", "/api/officer/finance/invoices", 200)]
     [InlineData("FinanceOfficer", "/api/officer/finance/students?search=Student", 200)]
+    [InlineData("FinanceOfficer", "/api/officer/finance/payment-requests/00000000-0000-0000-0000-000000000001", 404)]
     [InlineData("FinanceOfficer", "/api/student/finance/statement", 403)]
     [InlineData("FinanceOfficer", "/api/admin/users", 403)]
     [InlineData("Administrator", "/api/admin/users", 200)]
     [InlineData("Administrator", "/api/student/finance/statement", 403)]
     [InlineData("Administrator", "/api/officer/finance/invoices", 403)]
+    [InlineData("Administrator", "/api/officer/finance/payment-requests/00000000-0000-0000-0000-000000000001", 403)]
     public async Task Each_role_reaches_only_its_own_endpoints(string role, string path, int expected)
     {
         using var client = await _factory.ClientForRoleAsync(role);

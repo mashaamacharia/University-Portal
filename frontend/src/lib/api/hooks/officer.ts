@@ -11,6 +11,8 @@ import type {
   OfficerInvoicesQuery,
   OfficerPaymentsQuery,
   OutstandingBalancesQuery,
+  PaymentRequestResult,
+  RecordPaymentRequest,
 } from "@/types";
 
 export const officerKeys = {
@@ -46,6 +48,26 @@ export function useOfficerPayments(query: OfficerPaymentsQuery) {
     queryKey: officerKeys.payments(query),
     queryFn: () => officerApi.payments(query),
     placeholderData: keepPreviousData,
+  });
+}
+
+export function useStudentOpenInvoices(customerNumber: string | undefined) {
+  return useQuery({
+    queryKey: officerKeys.invoices({
+      CustomerNumber: customerNumber,
+      Status: "Open",
+      Page: 1,
+      PageSize: 100,
+    }),
+    queryFn: () =>
+      officerApi.invoices({
+        CustomerNumber: customerNumber,
+        Status: "Open",
+        Page: 1,
+        PageSize: 100,
+      }),
+    enabled: Boolean(customerNumber),
+    staleTime: 30_000,
   });
 }
 
@@ -107,6 +129,36 @@ export function useDiscardInvoice() {
     mutationFn: (id) => officerApi.discardInvoice(id),
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: officerKeys.invoice(id) });
+      queryClient.invalidateQueries({ queryKey: officerKeys.all });
+    },
+  });
+}
+
+export function useRecordPayment() {
+  const queryClient = useQueryClient();
+  return useMutation<PaymentRequestResult, Error, RecordPaymentRequest>({
+    mutationFn: (body) => officerApi.recordPayment(body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: officerKeys.all });
+    },
+  });
+}
+
+export function useReconcilePayment() {
+  const queryClient = useQueryClient();
+  return useMutation<PaymentRequestResult, Error, string>({
+    mutationFn: (id) => officerApi.reconcilePayment(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: officerKeys.all });
+    },
+  });
+}
+
+export function useCheckPaymentRequest() {
+  const queryClient = useQueryClient();
+  return useMutation<PaymentRequestResult, Error, string>({
+    mutationFn: (id) => officerApi.paymentRequest(id),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: officerKeys.all });
     },
   });
