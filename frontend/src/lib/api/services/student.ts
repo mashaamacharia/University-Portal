@@ -5,6 +5,7 @@ import type {
   InvoiceDetail,
   InvoiceSummary,
   PaymentHistoryPage,
+  Receipt,
   StudentPaymentsQuery,
 } from "@/types";
 
@@ -26,4 +27,12 @@ export const studentApi = {
 
   payments: (query?: StudentPaymentsQuery) =>
     apiFetch<PaymentHistoryPage>(`${base}/payments`, { query }),
+
+  receipt: (receiptNumber: string) =>
+    apiFetch<Receipt>(`${base}/receipts/${encodeURIComponent(receiptNumber)}`),
+
+  printReceipt: (receiptNumber: string) =>
+    apiFetch<Receipt>(`${base}/receipts/${encodeURIComponent(receiptNumber)}/print`, {
+      method: "POST",
+    }),
 };

@@ -43,6 +43,39 @@ export type InvoiceLine = Strict<S["InvoiceLineDto"]>;
 export type PaymentHistoryEntry = Strict<S["PaymentHistoryEntryDto"]>;
 export type PaymentHistoryPage = Strict<S["PaymentHistoryEntryDtoPagedResult"]>;
 export type StudentPaymentsQuery = QueryOf<"/api/student/finance/payments">;
+export type ReceiptStatus = "Valid" | "Reversed";
+export type Receipt = {
+  receiptNumber: string;
+  paymentDate: string;
+  status: ReceiptStatus;
+  issuer: {
+    name: string;
+    addressLines: string[];
+    phone: string | null;
+    email: string | null;
+    footerNote: string | null;
+  };
+  student: {
+    studentNumber: string;
+    name: string;
+    email: string | null;
+  };
+  amountReceived: number;
+  currencyCode: string;
+  currentAccountBalance: number | null;
+  accountBalanceCurrencyCode: string;
+  invoiceBalances: {
+    invoiceNumber: string;
+    remainingBalance: number;
+    currencyCode: string;
+  }[];
+  method: string | null;
+  reference: string | null;
+  receivedBy: string | null;
+  settledInvoices: string[];
+  printCount: number;
+  copyNumber: number | null;
+};
 
 // ---- Officer finance -------------------------------------------------------
 export type OfficerDashboard = Strict<S["OfficerDashboardDto"]>;

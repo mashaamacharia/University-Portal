@@ -21,10 +21,15 @@ public static class FinanceModuleExtensions
                         options.MethodBatches.Count,
                 "Payments:MethodBatches must list at least one payment method and journal batch.")
             .ValidateOnStart();
+        services.AddOptions<ReceiptOptions>()
+            .Bind(configuration.GetSection(ReceiptOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
         services.AddScoped<IStudentFinanceService, StudentFinanceService>();
         services.AddScoped<IOfficerFinanceService, OfficerFinanceService>();
         services.AddScoped<IInvoiceWorkflowService, InvoiceWorkflowService>();
         services.AddScoped<IPaymentRecordingService, PaymentRecordingService>();
+        services.AddScoped<IReceiptService, ReceiptService>();
         return services;
     }
 }

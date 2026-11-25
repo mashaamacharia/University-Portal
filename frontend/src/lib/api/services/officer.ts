@@ -10,6 +10,7 @@ import type {
   OutstandingBalancePage,
   OutstandingBalancesQuery,
   PaymentRequestResult,
+  Receipt,
   RecordPaymentRequest,
   StudentLookup,
 } from "@/types";
@@ -35,6 +36,18 @@ export const officerApi = {
     apiFetch<PaymentRequestResult>(
       `${base}/payment-requests/${encodeURIComponent(id)}/reconcile`,
       { method: "POST" },
+    ),
+
+  receipt: (studentNumber: string, receiptNumber: string) =>
+    apiFetch<Receipt>(
+      `${base}/receipts/${encodeURIComponent(receiptNumber)}`,
+      { query: { studentNumber } },
+    ),
+
+  printReceipt: (studentNumber: string, receiptNumber: string) =>
+    apiFetch<Receipt>(
+      `${base}/receipts/${encodeURIComponent(receiptNumber)}/print`,
+      { method: "POST", query: { studentNumber } },
     ),
 
   invoices: (query?: OfficerInvoicesQuery) =>

@@ -12,6 +12,7 @@ import type {
   OfficerPaymentsQuery,
   OutstandingBalancesQuery,
   PaymentRequestResult,
+  Receipt,
   RecordPaymentRequest,
 } from "@/types";
 
@@ -26,6 +27,8 @@ export const officerKeys = {
     ["officer", "invoices", query] as const,
   invoice: (id: string) => ["officer", "invoice", id] as const,
   students: (search: string) => ["officer", "students", search] as const,
+  receipt: (studentNumber: string, receiptNumber: string) =>
+    ["officer", "receipt", studentNumber, receiptNumber] as const,
 };
 
 export function useOfficerDashboard() {
@@ -48,6 +51,29 @@ export function useOfficerPayments(query: OfficerPaymentsQuery) {
     queryKey: officerKeys.payments(query),
     queryFn: () => officerApi.payments(query),
     placeholderData: keepPreviousData,
+  });
+}
+
+export function useOfficerReceipt(
+  studentNumber: string,
+  receiptNumber: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: officerKeys.receipt(studentNumber, receiptNumber),
+    queryFn: () => officerApi.receipt(studentNumber, receiptNumber),
+    enabled: enabled && Boolean(studentNumber) && Boolean(receiptNumber),
+  });
+}
+
+export function usePrintOfficerReceipt() {
+  return useMutation<
+    Receipt,
+    Error,
+    { studentNumber: string; receiptNumber: string }
+  >({
+    mutationFn: ({ studentNumber, receiptNumber }) =>
+      officerApi.printReceipt(studentNumber, receiptNumber),
   });
 }
 

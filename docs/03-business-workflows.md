@@ -116,7 +116,30 @@ The outstanding balance reflects the resulting Business Central records.
 
 For the practice project, use test transactions only. No real money is collected.
 
-## 5. Workflow D: Finance Officer Reviews Outstanding Balances
+## 5. Workflow D: View and Print a Receipt
+
+### Preconditions
+
+- The payment exists as a payment entry in Business Central.
+- The student is authenticated and mapped to the matching Business Central customer, or the caller is a finance officer.
+
+### Steps
+
+1. The user opens a receipt from the payment history.
+2. The API filters Business Central payment ledger entries by both the receipt number and the student's customer number.
+3. For portal-recorded payments, the portal adds the saved payment method, reference, invoice allocation and receiving officer.
+4. For payments entered directly in Business Central, the portal reports invoices fully closed by that payment when the ledger exposes the application.
+5. A separate print action persists a unique copy number before returning the receipt to the browser's print dialog.
+
+### Exceptions
+
+- A student cannot request another student's receipt; the lookup always uses the signed-in student's mapped customer.
+- A reversed receipt can be viewed but cannot be printed.
+- Direct Business Central payments have no portal-held payment method or receiver; partial allocations may not be available.
+
+The browser print dialog can save the receipt as PDF. The application does not create or store a PDF.
+
+## 6. Workflow E: Finance Officer Reviews Outstanding Balances
 
 1. The finance officer opens the finance dashboard.
 2. The backend verifies finance permissions.
@@ -126,7 +149,7 @@ For the practice project, use test transactions only. No real money is collected
 
 The dashboard must use authoritative Business Central information and must not expose unauthorized accounts.
 
-## 6. Workflow E: Integration Failure
+## 7. Workflow F: Integration Failure
 
 1. A user submits a request.
 2. The backend validates authorization and input.
@@ -136,7 +159,7 @@ The dashboard must use authoritative Business Central information and must not e
 6. The frontend displays an understandable message.
 7. For a write operation with an uncertain outcome, the backend checks the transaction status before retrying.
 
-## 7. Business Rules
+## 8. Business Rules
 
 - Posted Business Central records are authoritative for accounting.
 - The portal must not directly edit posted ledger entries.
@@ -148,7 +171,7 @@ The dashboard must use authoritative Business Central information and must not e
 - Payment amounts, applications and outstanding balances must be reconciled against BC records.
 - All test transactions must be identifiable as development activity.
 
-## 8. Future Workflows
+## 9. Future Workflows
 
 The following are outside the initial release:
 

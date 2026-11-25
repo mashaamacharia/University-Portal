@@ -1,4 +1,4 @@
-import { GraduationCap } from "lucide-react";
+import Image from "next/image";
 import { cn } from "@/lib/cn";
 
 export function Brand({
@@ -10,16 +10,21 @@ export function Brand({
 }) {
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <span className="grid size-9 place-items-center rounded-lg bg-forest-600 text-white">
-        <GraduationCap className="size-5" aria-hidden />
-      </span>
+      <Image
+        src="/chuka-university-logo.png"
+        alt=""
+        width={52}
+        height={42}
+        priority
+        className="h-10 w-12 shrink-0 object-contain"
+      />
       <span
         className={cn(
-          "font-serif text-xl font-semibold",
+          "font-serif text-base font-semibold leading-tight",
           tone === "light" ? "text-white" : "text-navy-900",
         )}
       >
-        University Portal
+        Chuka University Portal
       </span>
     </span>
   );

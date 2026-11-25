@@ -102,6 +102,9 @@ flowchart TD
 - Record finance-officer payments through `POST /api/officer/finance/payments`. Validate the student, optional posted invoice, amount and payment date, then persist an idempotency record before writing to Business Central.
 - Post received amounts as negative Business Central customer-payment journal lines. Serialize portal writes to each configured journal batch and invoice, refuse to post a batch containing another unposted entry, and reconcile uncertain outcomes against the customer ledger before retrying.
 - Expose payment status with `GET /api/officer/finance/payment-requests/{id}` and resolve uncertain outcomes with `POST /api/officer/finance/payment-requests/{id}/reconcile`.
+- Build student and officer receipts from authoritative Business Central customer-ledger entries. Portal-recorded payments add their method, reference, invoice allocation and receiver from the persisted payment request.
+- Include current Business Central balances for the student's account and associated invoices on receipt views; these are live balances, not historical balance snapshots from the payment date.
+- Record each receipt print as an original or numbered duplicate in the portal database. Reversed receipts remain viewable but cannot be printed.
 - Handle pagination, timeouts and API errors.
 - Apply safe retry and duplicate-prevention strategies to write operations.
 - Validate Business Central settings at startup and use bounded timeouts, retries and a circuit breaker for outbound requests. Retries are disabled for unsafe HTTP methods.
@@ -136,9 +139,9 @@ PostgreSQL stores portal identity data, including user accounts, roles, student-
 
 The schema is managed with Entity Framework Core migrations. Configure `ConnectionStrings:PortalDb` using user-secrets for local development or a managed secret store for deployed environments, then apply migrations before starting the API. The API seeds the Student, FinanceOfficer and Administrator roles at startup. A seed administrator is created only when `Seed:AdminEmail` and `Seed:AdminPassword` are configured and no administrator exists.
 
-The portal database also stores invoice and payment idempotency requests, including their payload hashes and lifecycle status. Payment requests retain the student, optional invoice, positive amount, method, Business Central receipt and ledger entry number, plus any failure or uncertain-outcome reason. Audit entries record actor, action, outcome, entity, trace and optional JSON details. Treat the audit table as append-only; in production grant the application database role only the required `SELECT` and `INSERT` access on that table, not `UPDATE` or `DELETE`.
+The portal database also stores invoice and payment idempotency requests, including their payload hashes and lifecycle status. Payment requests retain the student, optional invoice, positive amount, method, Business Central receipt and ledger entry number, plus any failure or uncertain-outcome reason. Receipt issues record each printed copy and the issuing user. Audit entries record actor, action, outcome, entity, trace and optional JSON details. Treat the audit table as append-only; in production grant the application database role only the required `SELECT` and `INSERT` access on that table, not `UPDATE` or `DELETE`.
 
-Configure `Payments:MethodBatches` to map accepted payment methods to Business Central customer-payment journal batches, and `Payments:MaxBackdateDays` to set the permitted payment-date window. Apply the `AddPaymentRequests` migration before using the payment endpoints.
+Configure `Payments:MethodBatches` to map accepted payment methods to Business Central customer-payment journal batches, and `Payments:MaxBackdateDays` to set the permitted payment-date window. Configure `Receipts` with the institution's verified name, address and contact information before issuing official receipts. Apply the `AddPaymentRequests` and `AddReceipts` migrations before using the payment and receipt endpoints.
 
 Invoice requests with a pending, unconfirmed Business Central outcome are checked by external document number before a retry. If no match is found, the workflow waits three minutes before permitting another attempt. Reusing a key with a different payload returns a conflict; duplicate Business Central matches require manual reconciliation.
 

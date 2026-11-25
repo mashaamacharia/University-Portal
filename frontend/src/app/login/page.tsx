@@ -8,7 +8,7 @@ import { getCurrentUser } from "@/lib/server/session";
 
 export const metadata: Metadata = {
   title: "Sign in",
-  description: "Sign in to the university portal.",
+  description: "Sign in to the Chuka University portal.",
 };
 
 const points = [
@@ -58,7 +58,7 @@ export default async function LoginPage({
             ))}
           </ul>
         </div>
-        <p className="relative text-sm text-navy-300">University Portal</p>
+        <p className="relative text-sm text-navy-300">Chuka University Portal</p>
       </aside>
 
       <section className="flex items-center justify-center px-6 py-12">
