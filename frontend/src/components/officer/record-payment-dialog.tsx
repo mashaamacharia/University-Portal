@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -243,7 +244,18 @@ export function RecordPaymentDialog({ open, onClose }: Props) {
             {result.receiptNumber && (
               <div>
                 <dt className="text-muted">Receipt</dt>
-                <dd className="font-medium text-navy-900">{result.receiptNumber}</dd>
+                <dd className="font-medium text-navy-900">
+                  {result.status === "Posted" ? (
+                    <Link
+                      className="text-forest-700 underline-offset-2 hover:underline"
+                      href={`/officer/receipts/${encodeURIComponent(result.receiptNumber)}?studentNumber=${encodeURIComponent(result.studentNumber)}`}
+                    >
+                      {result.receiptNumber}
+                    </Link>
+                  ) : (
+                    result.receiptNumber
+                  )}
+                </dd>
               </div>
             )}
           </dl>

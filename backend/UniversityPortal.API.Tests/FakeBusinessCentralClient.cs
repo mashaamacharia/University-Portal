@@ -63,7 +63,8 @@ public class FakeBusinessCentralClient : IBusinessCentralClient
         get
         {
             lock (_paymentLock)
-                return _paymentLedgerEntries.Count;
+                return _paymentLedgerEntries.Count(entry =>
+                    entry.DocumentType.Equals("Payment", StringComparison.OrdinalIgnoreCase));
         }
     }
 
@@ -105,6 +106,24 @@ public class FakeBusinessCentralClient : IBusinessCentralClient
                 ExternalDocumentNumber = "EXTERNAL-ENTRY"
             });
         }
+    }
+
+    public void MarkPaymentReversed(string receiptNumber)
+    {
+        lock (_paymentLock)
+        {
+            var entry = _paymentLedgerEntries.FirstOrDefault(
+                payment => payment.DocumentNumber == receiptNumber);
+            if (entry is null)
+                throw new InvalidOperationException($"Payment receipt '{receiptNumber}' was not found.");
+            entry.Reversed = true;
+        }
+    }
+
+    public void AddLedgerEntry(BcCustomerLedgerEntryDto entry)
+    {
+        lock (_paymentLock)
+            _paymentLedgerEntries.Add(entry);
     }
 
     public void Reset()
@@ -373,6 +392,10 @@ public class FakeBusinessCentralClient : IBusinessCentralClient
                 .Where(entry => query.CustomerNumber is null || entry.CustomerNumber == query.CustomerNumber)
                 .Where(entry => query.ExternalDocumentNumber is null ||
                     entry.ExternalDocumentNumber == query.ExternalDocumentNumber)
+                .Where(entry => query.DocumentNumber is null ||
+                    entry.DocumentNumber == query.DocumentNumber)
+                .Where(entry => query.ClosedByEntryNumber is null ||
+                    entry.ClosedByEntryNumber == query.ClosedByEntryNumber)
                 .Where(entry => query.DocumentTypes is not { Count: > 0 } ||
                     query.DocumentTypes.Contains(entry.DocumentType, StringComparer.OrdinalIgnoreCase))
                 .ToList();

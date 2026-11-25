@@ -425,6 +425,13 @@ public class BusinessCentralClient : IBusinessCentralClient
             clauses.Add(
                 $"externalDocumentNumber eq '{q.ExternalDocumentNumber.Replace("'", "''", StringComparison.Ordinal)}'");
 
+        if (!string.IsNullOrWhiteSpace(q.DocumentNumber))
+            clauses.Add(
+                $"documentNumber eq '{q.DocumentNumber.Replace("'", "''", StringComparison.Ordinal)}'");
+
+        if (q.ClosedByEntryNumber is { } closedByEntryNumber)
+            clauses.Add($"closedByEntryNumber eq {closedByEntryNumber}");
+
         var parts = new List<string>
         {
             "$count=true",

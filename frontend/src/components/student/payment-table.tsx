@@ -1,4 +1,5 @@
 import { Banknote } from "lucide-react";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TBody, Td, Th, THead, Tr } from "@/components/ui/table";
@@ -29,7 +30,18 @@ export function PaymentTable({
       <TBody>
         {payments.map((payment, i) => (
           <Tr key={`${payment.receiptNumber}-${i}`}>
-            <Td className="font-medium">{payment.receiptNumber || "-"}</Td>
+            <Td className="font-medium">
+              {payment.receiptNumber ? (
+                <Link
+                  className="text-forest-700 underline-offset-2 hover:underline"
+                  href={`/student/receipts/${encodeURIComponent(payment.receiptNumber)}`}
+                >
+                  {payment.receiptNumber}
+                </Link>
+              ) : (
+                "-"
+              )}
+            </Td>
             <Td>{formatDate(payment.paymentDate)}</Td>
             <Td align="right">
               <span className={cn(payment.reversed && "text-muted line-through")}>

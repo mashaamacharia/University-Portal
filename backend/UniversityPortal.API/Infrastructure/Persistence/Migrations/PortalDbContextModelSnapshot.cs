@@ -417,11 +417,48 @@ namespace UniversityPortal.API.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ReceiptNumber");
+
                     b.HasIndex("Status");
 
                     b.HasIndex("StudentNumber", "CreatedAtUtc");
 
                     b.ToTable("PaymentRequests", (string)null);
+                });
+
+            modelBuilder.Entity("UniversityPortal.API.Modules.Finance.Models.ReceiptIssue", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("CopyNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("IssuedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("IssuedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReceiptNumber")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("StudentNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReceiptNumber", "StudentNumber", "CopyNumber")
+                        .IsUnique();
+
+                    b.ToTable("ReceiptIssues", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>

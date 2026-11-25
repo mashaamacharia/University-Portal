@@ -1,4 +1,4 @@
-# University Portal (frontend)
+# Chuka University Portal (frontend)
 
 Next.js + React + TypeScript + Tailwind. Talks to the ASP.NET portal API through
 a same-origin proxy, so the JWT only ever lives in an httpOnly cookie.

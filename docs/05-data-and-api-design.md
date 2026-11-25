@@ -106,11 +106,21 @@ These are proposed portal endpoints, not existing Business Central endpoints.
 | POST   | `/api/officer/finance/payments`        | Record and post a finance-officer payment  |
 | GET    | `/api/officer/finance/payment-requests/{id}` | Retrieve a payment request outcome          |
 | POST   | `/api/officer/finance/payment-requests/{id}/reconcile` | Reconcile an uncertain payment post |
+| GET    | `/api/student/finance/receipts/{receiptNumber}` | Retrieve a receipt for the signed-in student |
+| POST   | `/api/student/finance/receipts/{receiptNumber}/print` | Record and return the next student receipt copy |
+| GET    | `/api/officer/finance/receipts/{receiptNumber}?studentNumber={number}` | Retrieve a receipt for a finance officer |
+| POST   | `/api/officer/finance/receipts/{receiptNumber}/print?studentNumber={number}` | Record and return the next officer receipt copy |
 | GET    | `/api/v1/health`                       | Check application health                   |
 
 The student endpoints derive the student's identity from the authenticated session. They must not rely solely on a client-supplied student ID.
 
 Finance endpoints require appropriate finance permissions.
+
+Receipt content is assembled from Business Central payment ledger entries, constrained by both receipt number and customer number. Portal-recorded payments add method, reference, receiving officer and the invoice selected during entry. Receipts for payments entered directly in Business Central infer invoices fully closed by the payment when the ledger data supports it. Print requests persist copy number 0 for the original and 1+ for duplicates; GET requests do not create print records. Reversed payments can be viewed but not printed.
+
+Receipt views also include the current customer account balance and current remaining balance for each associated invoice that Business Central can resolve. These values may change after the payment date and are not historical snapshots.
+
+`ReceiptIssues` stores the receipt number, student number, copy number, issuing user and issue time. Its unique index prevents two simultaneous print requests from issuing the same copy number. Issuer name, address, phone, email and footer text come from the `Receipts` configuration section; replace development values with verified institutional details before issuing official receipts.
 
 ## 5. Business Central Integration
 

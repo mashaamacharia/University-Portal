@@ -1,6 +1,6 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { studentApi } from "@/lib/api";
-import type { StudentPaymentsQuery } from "@/types";
+import type { Receipt, StudentPaymentsQuery } from "@/types";
 
 export const studentKeys = {
   statement: (top?: number) => ["student", "statement", top] as const,
@@ -8,6 +8,8 @@ export const studentKeys = {
   invoice: (number: string) => ["student", "invoice", number] as const,
   payments: (query?: StudentPaymentsQuery) =>
     ["student", "payments", query] as const,
+  receipt: (receiptNumber: string) =>
+    ["student", "receipt", receiptNumber] as const,
 };
 
 export function useStatement(top?: number) {
@@ -36,5 +38,19 @@ export function useStudentPayments(query: StudentPaymentsQuery) {
     queryKey: studentKeys.payments(query),
     queryFn: () => studentApi.payments(query),
     placeholderData: keepPreviousData, // keep the old page on screen while the next loads
+  });
+}
+
+export function useStudentReceipt(receiptNumber: string, enabled = true) {
+  return useQuery({
+    queryKey: studentKeys.receipt(receiptNumber),
+    queryFn: () => studentApi.receipt(receiptNumber),
+    enabled: enabled && Boolean(receiptNumber),
+  });
+}
+
+export function usePrintStudentReceipt() {
+  return useMutation<Receipt, Error, string>({
+    mutationFn: (receiptNumber) => studentApi.printReceipt(receiptNumber),
   });
 }

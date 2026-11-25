@@ -96,4 +96,23 @@
   .shadow-card {
     box-shadow: none;
   }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .receipt-print,
+  .receipt-print * {
+    visibility: visible !important;
+  }
+
+  .receipt-print {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    max-width: none;
+    border: 0;
+    padding: 0;
+    box-shadow: none;
+  }
 }

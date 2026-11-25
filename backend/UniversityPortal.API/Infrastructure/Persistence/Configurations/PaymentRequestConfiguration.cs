@@ -23,5 +23,6 @@ public class PaymentRequestConfiguration : IEntityTypeConfiguration<PaymentReque
 
         builder.HasIndex(payment => new { payment.StudentNumber, payment.CreatedAtUtc });
         builder.HasIndex(payment => payment.Status);
+        builder.HasIndex(payment => payment.ReceiptNumber);
     }
 }

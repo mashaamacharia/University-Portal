@@ -17,10 +17,10 @@ const newsreader = Newsreader({
 
 export const metadata: Metadata = {
   title: {
-    default: "University Portal",
-    template: "%s | University Portal",
+    default: "Chuka University Portal",
+    template: "%s | Chuka University Portal",
   },
-  description: "Fees, invoices and payments for students and finance staff.",
+  description: "Chuka University fees, invoices and payments for students and finance staff.",
 };
 
 export default function RootLayout({

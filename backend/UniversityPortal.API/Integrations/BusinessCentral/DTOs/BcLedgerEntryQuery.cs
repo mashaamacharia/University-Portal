@@ -7,4 +7,6 @@ public record BcLedgerEntryQuery(
     DateOnly? To,
     int Skip,
     int Top,
-    string? ExternalDocumentNumber = null);
+    string? ExternalDocumentNumber = null,
+    string? DocumentNumber = null,
+    int? ClosedByEntryNumber = null);
